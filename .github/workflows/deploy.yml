@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-      - name: 仓库清单 / 通用痕迹 / 载荷与资源 / 体积
+      - name: 仓库清单 / 通用痕迹 / 载荷与资源 / 关卡数据 / 体积
         run: python scripts/check_publish.py
 
   deploy:
@@ -47,8 +47,10 @@ jobs:
           cp index.html manifest.webmanifest .nojekyll _site/
           cp icon-192.png icon-512.png _site/
           cp -r wave unbalance _site/
+          if [ -d data ]; then cp -r data _site/; fi
           echo "--- 待发布内容 ---"
-          find _site -type f | sort
+          find _site -type f | wc -l | sed 's/^/  文件数: /'
+          find _site -maxdepth 1 -mindepth 1 | sort
           echo "--- 体积 ---"
           du -sh _site
 

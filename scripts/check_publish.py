@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""站点检查（CI 与本地都能跑）。四项，都不含项目专属判断：
+"""站点检查（CI 与本地都能跑）。五项，都不含项目专属判断：
 
 1. **仓库清单** —— 被 git 跟踪的文件必须落在允许清单内。**多出来的文件一律失败**
    （这是"往公开仓丢了个不该丢的文件"的第一道拦截）；
@@ -8,7 +8,11 @@
    **放哪儿都不该出现**的写法（不点名任何具体目录，所以检查本身不泄露信息）；
 3. **映射库载荷合法性** —— `wave/wave-mappings.js` 必须是能解析的 `window.WAVE_MAPPINGS = {...};`，
    四张表齐全且非空；
-4. **相对资源与体积** —— 页面引用的资源必须存在且不得用根相对路径；站点 ≤ 1 MB、`data/` ≤ 64 MB。
+4. **关卡数据自洽** —— `data/levels-index.json` 列出的每一关都必须真有文件、磁盘上不得有索引外的
+   孤儿文件、每个载荷都能解析（这是"点了 404"与"文件被写坏"的唯一自动拦截）。没有 `data/` 就跳过；
+5. **相对资源与体积** —— 页面引用的资源必须存在且不得用根相对路径；站点 ≤ 1 MB、`data/` ≤ 64 MB。
+
+页面清单（第 5 项）**自动发现**：根 `index.html` + 所有 `*/index.html` —— 加新工具时不必再登记一处。
 
 为什么第 2 项只收"通用"特征：任何**具体**的私有目录名/工具链名写进这里，等于把要拦的东西
 公开一遍。真正的私有词表在本地发布脚本里（那份不公开），两层分工：
@@ -36,16 +40,20 @@ ALLOWED_FILES = {
     "wave/index.html", "wave/wave-mappings.js",
     "unbalance/index.html",
 }
-# 允许的目录前缀（`data/` 留给阶段 2 的关卡数据；`scripts/` 只收平铺的 .py）
+# 允许的目录前缀：**只收平铺文件**（子目录不许有）
 ALLOWED_PREFIXES = {
     "scripts/": (".py",),
     ".github/workflows/": (".yml", ".yaml"),
+}
+# 允许**嵌套子目录**的目录树（关卡数据按 `data/levels/<分区>/<关>.json` 分层）
+ALLOWED_TREES = {
     "data/": (".json",),
 }
 
 # ── 通用痕迹：不点名任何具体目录，只说"这种写法不该出现"──
 GENERIC = [
-    (r"[A-Za-z]:[\\/]", "绝对盘符路径"),
+    # 盘符路径：要求反斜杠/斜杠后面**还有路径片段**，否则 `file://` 里的 `e:/` 会假报警
+    (r"[A-Za-z]:[\\/](?![\\/])", "绝对盘符路径"),
     (r"file:///", "file:// 绝对 URL"),
     (r"127\.0\.0\.1|localhost:\d", "本机地址"),
     (r"docs/[a-z][a-z0-9_-]*/", "指向别处 docs 目录的引用"),
@@ -57,7 +65,15 @@ MAX_FILE_BYTES = 400 * 1024          # 单个站点文件
 MAX_SITE_BYTES = 1024 * 1024         # 站点（不含 data/）
 MAX_DATA_BYTES = 64 * 1024 * 1024    # data/
 
-PAGES = ["index.html", "wave/index.html", "unbalance/index.html"]
+def discover_pages(root: str) -> list:
+    """页面清单 = 根 index.html + 所有 `*/index.html`（自动发现，加新工具不必登记）。"""
+    out = []
+    if os.path.isfile(os.path.join(root, "index.html")):
+        out.append("index.html")
+    for d in sorted(os.listdir(root)):
+        if os.path.isfile(os.path.join(root, d, "index.html")):
+            out.append(d + "/index.html")
+    return out
 
 # 本文件的路径：它承载着下面的模式表，没法用这些模式自检，跳过它自己
 SELF = "scripts/check_publish.py"
@@ -73,19 +89,23 @@ def walk_files(root: str):
 
 
 def repo_files(root: str):
-    """检查对象 = **被 git 跟踪的文件**。
+    """检查对象 = **将被提交的文件**（已跟踪的 + 未跟踪但未被 ignore 的）。
 
-    不能用裸遍历：本地有两份被 ignore 的私有文件（`README1.md` / `AGENTS.md`），
-    裸遍历会把它们一起算进来，既误报"清单外文件"、又误报其中的绝对路径。
+    两点都要照顾：
+    * 不能裸遍历 —— 本地有两份被 ignore 的私有文件（`README1.md` / `AGENTS.md`），
+      裸遍历会把它们算进来，既误报"清单外文件"、又误报其中的绝对路径；
+    * 也不能只看已跟踪 —— 本地发布脚本是在 `git add` **之前**跑这个检查的，
+      新生成的 `data/` 那时还没进索引，只看已跟踪就会漏掉整个数据目录。
     git 不可用时退回遍历（CI 与本机都有 git，正常走不到）。
     """
     try:
-        out = subprocess.run(["git", "-C", root, "ls-files"],
-                             capture_output=True, text=True, timeout=30)
+        out = subprocess.run(["git", "-C", root, "ls-files", "-z",
+                              "--cached", "--others", "--exclude-standard"],
+                             capture_output=True, text=True, timeout=60)
         if out.returncode == 0:
-            files = [l.strip() for l in out.stdout.splitlines() if l.strip()]
+            files = sorted(l for l in out.stdout.split("\0") if l.strip())
             if files:
-                return files, "git ls-files"
+                return files, "git ls-files --cached --others"
     except Exception:
         pass
     return walk_files(root), "目录遍历（git 不可用）"
@@ -94,8 +114,14 @@ def repo_files(root: str):
 def allowed(rel: str) -> bool:
     if rel in ALLOWED_FILES:
         return True
+    ext = os.path.splitext(rel)[1].lower()
     for pre, exts in ALLOWED_PREFIXES.items():
-        if rel.startswith(pre) and "/" not in rel[len(pre):] and os.path.splitext(rel)[1].lower() in exts:
+        rest = rel[len(pre):] if rel.startswith(pre) else None
+        if rest and "/" not in rest and ext in exts:
+            return True
+    for pre, exts in ALLOWED_TREES.items():
+        rest = rel[len(pre):] if rel.startswith(pre) else None
+        if rest and ext in exts:
             return True
     return False
 
@@ -118,6 +144,8 @@ def check_generic(root: str, files: list) -> int:
     for p in files:
         if p == SELF:
             continue               # 本文件的模式表里就写着这些 pattern，没法自检
+        if p.startswith("data/"):
+            continue               # 数据是生成的载荷，不是"作者写的文本"；由第 4 项校验
         if os.path.splitext(p)[1].lower() not in TEXT_EXT:
             continue
         full = os.path.join(root, p.replace("/", os.sep))
@@ -175,7 +203,8 @@ def check_js_payload(root: str) -> int:
 
 def check_assets(root: str) -> int:
     bad = 0
-    for rel in PAGES:
+    pages = discover_pages(root)
+    for rel in pages:
         p = os.path.join(root, rel.replace("/", os.sep))
         if not os.path.isfile(p):
             print("  ✗ 缺页面 %s" % rel)
@@ -195,7 +224,69 @@ def check_assets(root: str) -> int:
                 print("  ✗ %s 引用了不存在的相对资源 %r" % (rel, u))
                 bad += 1
     if bad == 0:
-        print("  ✓ 三个页面的相对资源齐全，且无根相对路径")
+        print("  ✓ %d 个页面的相对资源齐全，且无根相对路径（自动发现）" % len(pages))
+    return bad
+
+
+def check_data(root: str) -> int:
+    """关卡数据自洽：索引 ↔ 文件一一对应、无孤儿、载荷能解析。
+
+    没有 `data/` 就跳过 —— 站点不带关卡数据时这一项不适用。
+    """
+    idx_p = os.path.join(root, "data", "levels-index.json")
+    if not os.path.isfile(idx_p):
+        print("  · 无 data/levels-index.json —— 跳过（本站点未托管关卡数据）")
+        return 0
+    try:
+        idx = json.load(open(idx_p, encoding="utf-8"))
+    except Exception as e:
+        print("  ✗ data/levels-index.json 不是合法 JSON：%s" % e)
+        return 1
+    areas, levels = idx.get("areas"), idx.get("levels")
+    if not isinstance(areas, list) or not isinstance(levels, dict):
+        print("  ✗ data/levels-index.json 结构不对（需要 areas:[] 与 levels:{}）")
+        return 1
+
+    bad = 0
+    lvroot = os.path.join(root, "data", "levels")
+    listed, missing = [], []
+    for a, arr in levels.items():
+        for bare in arr:
+            rel = a + "/" + bare
+            listed.append(rel)
+            if not os.path.isfile(os.path.join(lvroot, rel.replace("/", os.sep) + ".json")):
+                missing.append(rel)
+    if missing:
+        print("  ✗ 索引里有 %d 关没有对应文件，前几关：%s" % (len(missing), missing[:5]))
+        bad += len(missing)
+
+    disk = set()
+    for dp, _dn, fn in os.walk(lvroot):
+        for f in fn:
+            if f.endswith(".json"):
+                r = os.path.relpath(os.path.join(dp, f), lvroot).replace("\\", "/")
+                disk.add(r[:-5])
+    orphan = sorted(disk - set(listed))
+    if orphan:
+        print("  ✗ 磁盘上有 %d 个索引外的孤儿文件，前几个：%s" % (len(orphan), orphan[:5]))
+        bad += len(orphan)
+
+    broken = []
+    for rel in listed:
+        p = os.path.join(lvroot, rel.replace("/", os.sep) + ".json")
+        if not os.path.isfile(p):
+            continue
+        try:
+            json.load(open(p, encoding="utf-8"))
+        except Exception:
+            broken.append(rel)
+    if broken:
+        print("  ✗ 有 %d 个关卡载荷解析失败（多半被截断），前几个：%s" % (len(broken), broken[:5]))
+        bad += len(broken)
+
+    if bad == 0:
+        print("  ✓ 关卡数据自洽：索引 %d 关 / 分区 %d 个，文件一一对应、载荷均可解析"
+              % (len(listed), len(areas)))
     return bad
 
 
@@ -236,20 +327,24 @@ def main() -> int:
     files, src = repo_files(root)
 
     bad = 0
-    print("[1/4] 仓库清单（只允许多出来的文件 = 0）")
+    print("[1/5] 仓库清单（只允许多出来的文件 = 0）")
     bad += check_manifest(files, src)
     print()
 
-    print("[2/4] 通用痕迹")
+    print("[2/5] 通用痕迹")
     bad += check_generic(root, files)
     print()
 
-    print("[3/4] 映射库载荷 + 相对资源")
+    print("[3/5] 映射库载荷 + 相对资源")
     bad += check_js_payload(root)
     bad += check_assets(root)
     print()
 
-    print("[4/4] 体积")
+    print("[4/5] 关卡数据自洽")
+    bad += check_data(root)
+    print()
+
+    print("[5/5] 体积")
     bad += check_sizes(root, files)
     print()
 

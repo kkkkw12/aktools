@@ -17,6 +17,14 @@ header h1{font-size:15px;margin:0;font-weight:600}
 header select,input[type=text],input[type=number]{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:4px;padding:3px 8px}
 label.file{background:var(--acc);color:#fff;border-radius:4px;padding:4px 12px;cursor:pointer}
 label.file input{display:none}
+/* 换关：分区 → 关 两级。筛选框有词时跨分区找（一次列出各区的命中）。
+   三个控件装在一个容器里 —— 否则窄屏上会被 flex-grow 各撑满一行。 */
+#lvBar{display:flex;align-items:center;gap:8px;min-width:0}
+#areaSel{max-width:190px}
+#sampleSel{max-width:270px}
+#lvFilter{width:150px}
+#lvMsg{font-size:11px;color:var(--warn)}
+#lvMsg:empty{display:none}
 #totalInfo{color:var(--tx2)}
 main{display:flex;align-items:flex-start}
 aside{width:360px;min-width:360px;background:var(--panel);border-right:1px solid var(--line);padding:10px 12px;max-height:calc(100vh - 46px);overflow-y:auto}
@@ -105,6 +113,16 @@ button:hover{border-color:var(--acc)}
   #note,.src,.hint,.warnline{font-size:12px}
   #tlGutter{width:96px;min-width:96px}
   #evInfo{font-size:13px}
+  /* 区 / 关 / 筛选 三个控件锁在同一行（容器占满一行，内部按比例分） */
+  #lvBar{flex:1 1 100%;gap:6px}
+  #areaSel{max-width:none;flex:1 1 26%;min-width:0}
+  #sampleSel{max-width:none;flex:2.2 1 40%;min-width:0}
+  #lvFilter{flex:1.6 1 34%;min-width:0;width:auto}
+  #lvMsg{flex:1 1 100%}
+  /* 关卡总览与缩放条挤同一行，过长就截断（省一行 header 高度）。
+     基准给 0 才对：给 auto 的话它会先按内容占满一行，缩放条只能换行。 */
+  #totalInfo{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  header{gap:6px}
 }
 </style>
 </head>
@@ -112,8 +130,14 @@ button:hover{border-color:var(--acc)}
 <header>
   <button id="panelBtn">参数</button>
   <h1>波次帧账分析器</h1>
-  <select id="sampleSel"></select>
   <label class="file">导入关卡 JSON<input type="file" id="fileIn" accept=".json"></label>
+  <span id="lvBar">
+    <select id="areaSel" title="分区"></select>
+    <select id="sampleSel" title="关卡"></select>
+    <input type="text" id="lvFilter" placeholder="筛选关卡" title="输入关代码或关名（跨分区找）"
+           autocomplete="off">
+  </span>
+  <span id="lvMsg"></span>
   <span id="totalInfo"></span>
   <span style="margin-left:auto;color:var(--tx2);font-size:12px">px/帧 <input type="range" id="zoom" min="0.05" max="2" step="0.05" value="0.35"></span>
 </header>
@@ -1196,12 +1220,95 @@ window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"t
     if (!maps.length && !levels.length) alert("拖入的文件既不是关卡 JSON，也认不出是映射表");
   });
 
+  // ---------- 换关：分区 → 关 两级，关卡数据从站点按需取 ----------
+  // 页面在 `<站点>/wave/`，数据在 `<站点>/data/`：
+  //   ../data/levels-index.json        分区清单 + 各区关卡清单
+  //   ../data/levels/<分区>/<关>.json   单关（裁剪后的精简载荷）
+  // 取不到就退回内嵌样例 —— 本地直接双击打开时 `file://` 取不到站点数据，属预期。
+  const SAMPLE_GROUP = "__samples__", SEP = "\u0000";
   const sel = $("#sampleSel");
-  Object.entries(SAMPLES).forEach(([k, v]) => {
-    const o = document.createElement("option"); o.value = k;
-    o.textContent = labelOfKey(k) || v.levelId; sel.appendChild(o);
+  let INDEX = null;
+  const lvText = bare => labelOfKey(bare) || bare;
+  const areaLabelOf = a => {
+    const e = INDEX && (INDEX.areas || []).find(x => x[0] === a);
+    return e ? e[1] : a;
+  };
+  const setLvMsg = s => { const el = $("#lvMsg"); if (el) el.textContent = s || ""; };
+  const opt = (v, t) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = t; return o;
+  };
+
+  function fillAreaSel() {
+    const asel = $("#areaSel");
+    asel.innerHTML = "";
+    asel.appendChild(opt(SAMPLE_GROUP, "内嵌样例（" + Object.keys(SAMPLES).length + "）"));
+    if (INDEX) (INDEX.areas || []).forEach(([k, lab]) => asel.appendChild(opt(k, lab)));
+    asel.value = SAMPLE_GROUP;
+  }
+
+  function fillLevelSel() {
+    sel.innerHTML = "";
+    const q = ($("#lvFilter").value || "").trim().toLowerCase();
+    const list = [];                      // [分区, 关文件名]
+    if (q) {
+      // 有筛选词 ⇒ 跨分区找（关代码 / 关名 / 文件名任一命中即列出）
+      Object.keys(SAMPLES).forEach(k => {
+        if (k.toLowerCase().indexOf(q) >= 0 || lvText(k).toLowerCase().indexOf(q) >= 0)
+          list.push([SAMPLE_GROUP, k]);
+      });
+      if (INDEX) {
+        const areas = Object.keys(INDEX.levels || {});
+        for (let i = 0; i < areas.length && list.length <= 300; i++) {
+          const a = areas[i];
+          for (const bare of INDEX.levels[a]) {
+            if (list.length > 300) break;
+            if (bare.toLowerCase().indexOf(q) >= 0 || lvText(bare).toLowerCase().indexOf(q) >= 0)
+              list.push([a, bare]);
+          }
+        }
+      }
+    } else {
+      const a = $("#areaSel").value;
+      const arr = a === SAMPLE_GROUP ? Object.keys(SAMPLES)
+                                     : ((INDEX && INDEX.levels && INDEX.levels[a]) || []);
+      arr.forEach(bare => list.push([a, bare]));
+    }
+    if (!list.length) sel.appendChild(opt("", q ? "无匹配" : "（这个分区没有关卡）"));
+    list.slice(0, 300).forEach(([a, bare]) => {
+      sel.appendChild(opt(a + SEP + bare,
+        (q && a !== SAMPLE_GROUP ? areaLabelOf(a) + " · " : "") + lvText(bare)));
+    });
+    if (q && list.length > 300) setLvMsg("匹配较多，只列前 300 条 —— 再输入几个字符缩小范围");
+    else if (!INDEX) setLvMsg("");
+  }
+
+  async function openLevel(a, bare) {
+    if (!bare) return;
+    if (a === SAMPLE_GROUP) { loadLevel(SAMPLES[bare], bare); setLvMsg(""); return; }
+    const id = a + "/" + bare;
+    setLvMsg("正在取 " + lvText(bare) + " …");
+    try {
+      const r = await fetch("../data/levels/" + id + ".json", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      loadLevel(await r.json(), id);
+      setLvMsg("");
+    } catch (e) {
+      setLvMsg("✗ 取不到这一关（" + ((e && e.message) || e) +
+               "）—— 站点数据要经 http(s) 访问；本地直接双击打开时请改用「导入关卡 JSON」或内嵌样例。");
+    }
+  }
+
+  fillAreaSel();
+  fillLevelSel();
+  $("#areaSel").addEventListener("change", () => { $("#lvFilter").value = ""; fillLevelSel(); });
+  sel.addEventListener("change", () => {
+    const v = sel.value, i = v.indexOf(SEP);
+    if (i > 0) openLevel(v.slice(0, i), v.slice(i + 1));
   });
-  sel.addEventListener("change", () => loadLevel(SAMPLES[sel.value], sel.value));
+  let lvTimer = null;
+  $("#lvFilter").addEventListener("input", () => {
+    clearTimeout(lvTimer); lvTimer = setTimeout(fillLevelSel, 150);
+  });
   $("#fileIn").addEventListener("change", ev => {
     const f = ev.target.files[0]; if (!f) return;
     const rd = new FileReader();
@@ -1249,10 +1356,26 @@ window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"t
   // 窄屏默认收起参数面板：先让主内容（时间轴 / 两张表）占满可视区，要调参数再点「参数」展开
   if (window.matchMedia && window.matchMedia("(max-width:860px)").matches) panelEl.classList.add("folded");
 
+  // 首屏先用内嵌样例把界面填满（不等网络），站点索引异步取
   if (Object.keys(SAMPLES).length) {
     const first = Object.keys(SAMPLES)[0];
-    sel.value = first; loadLevel(SAMPLES[first], first);
+    sel.value = SAMPLE_GROUP + SEP + first;
+    loadLevel(SAMPLES[first], first);
   }
+  (async () => {
+    try {
+      const r = await fetch("../data/levels-index.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const keep = sel.value;
+      const touched = $("#areaSel").value !== SAMPLE_GROUP;
+      INDEX = await r.json();
+      if (!touched) { fillAreaSel(); fillLevelSel(); }
+      if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+    } catch (e) {
+      setLvMsg("站点关卡数据不可用（" + ((e && e.message) || e) +
+               "）—— 现在只有内嵌样例，也可用「导入关卡 JSON」。");
+    }
+  })();
 })();
 </script>
 </body>
