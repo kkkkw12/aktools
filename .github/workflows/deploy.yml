@@ -1,0 +1,60 @@
+name: Deploy to GitHub Pages
+
+# 只有一条触发：`main` 有提交就校验 + 部署。
+# 这里只做「完整性检查 + 发布」—— 站点内容是本地做好的。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages 部署不要并发跑；但也不要 cancel 掉正在进行的部署（避免半途状态）
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 完整性检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: 映射库载荷 / 相对资源 / 体积
+        run: python scripts/check_publish.py
+
+  deploy:
+    name: 部署
+    needs: gate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 只把「站点内容」打进 artifact —— scripts/、README、.git 不发布
+      - name: 组装站点
+        run: |
+          set -eu
+          mkdir -p _site
+          cp index.html manifest.webmanifest .nojekyll _site/
+          cp icon-192.png icon-512.png _site/
+          cp -r wave unbalance _site/
+          echo "--- 待发布内容 ---"
+          find _site -type f | sort
+          echo "--- 体积 ---"
+          du -sh _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

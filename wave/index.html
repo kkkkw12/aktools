@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>波次帧账分析器</title>
+<style>
+:root{
+  --bg:#14161a; --panel:#1b1e24; --panel2:#20242c; --line:#2a2f3a;
+  --tx:#d8dce2; --tx2:#8b93a1; --acc:#4da3ff; --ok:#66bb6a; --warn:#ffb74d;
+  --syn:#b39ddb; --del:#5a5f6a; --gold:#ffd54f; --mimic:#ce93d8; --bad:#e26a6a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.5 "Segoe UI","Microsoft YaHei",sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;flex-wrap:wrap}
+header h1{font-size:15px;margin:0;font-weight:600}
+header select,input[type=text],input[type=number]{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:4px;padding:3px 8px}
+label.file{background:var(--acc);color:#fff;border-radius:4px;padding:4px 12px;cursor:pointer}
+label.file input{display:none}
+#totalInfo{color:var(--tx2)}
+main{display:flex;align-items:flex-start}
+aside{width:360px;min-width:360px;background:var(--panel);border-right:1px solid var(--line);padding:10px 12px;max-height:calc(100vh - 46px);overflow-y:auto}
+aside h3{font-size:12px;color:var(--tx2);margin:14px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+aside h3:first-child{margin-top:0}
+.grp{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-bottom:6px}
+.grp .gname{font-family:Consolas,monospace;color:var(--acc);font-size:12px}
+.grp select{width:100%;margin-top:4px;background:var(--panel);color:var(--tx);border:1px solid var(--line);border-radius:4px;padding:3px 6px}
+.grp .meta{color:var(--tx2);font-size:11px;margin-top:2px}
+.tag{display:inline-block;border-radius:3px;padding:0 5px;font-size:10px;margin-left:4px}
+.tag.gold{background:#3a3323;color:var(--gold)}
+.tag.mimic{background:#33283a;color:var(--mimic)}
+.tag.hg{background:#3a2b1f;color:var(--warn)}
+.tag.rg{background:#1f3040;color:var(--acc)}
+.tag.var{background:#2b3040;color:#9fb3d1}
+.tag.lv{background:#3a2530;color:#f0997b}
+.hg{display:flex;align-items:center;gap:8px;padding:3px 4px}
+.gateRow{display:flex;align-items:center;gap:5px;margin-bottom:5px;font-size:12px;flex-wrap:wrap}
+.gateRow input{width:58px}
+.gateRow .gname{font-family:Consolas,monospace;color:var(--acc);font-size:12px}
+.gateRow .gs{color:var(--tx2);font-family:Consolas,monospace}
+.mapBtns{display:flex;gap:6px;align-items:center;margin:6px 0}
+.cRow{display:grid;grid-template-columns:1fr 84px;gap:6px;align-items:center;margin-bottom:4px;font-size:12px}
+.cRow input{width:100%}
+.eRow{display:grid;grid-template-columns:1fr 62px;gap:6px;align-items:center;margin-bottom:3px;font-size:11px}
+.eRow span.k{font-family:Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eRow input{width:100%;font-size:11px;padding:2px 4px}
+.src{color:var(--tx2);font-size:10px}
+#mainArea{flex:1;padding:10px 14px;min-width:0}
+#tlWrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;margin-bottom:10px}
+#tl{display:flex;align-items:flex-start}
+#tlGutter{position:sticky;left:0;z-index:3;width:120px;min-width:120px;background:var(--panel);border-right:1px solid var(--line)}
+#tlGutter .gh{height:16px}
+#tlGutter .glane{box-sizing:border-box;display:flex;align-items:center;font-size:10px;color:var(--tx2);padding-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tlGutter .glane i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px;flex:none}
+#tlPlot{position:relative;flex:0 0 auto}
+.waveBand{position:absolute;top:0;border-left:1px solid var(--line)}
+.waveBand .wl{position:absolute;top:2px;left:4px;font-size:10px;color:var(--tx2);white-space:nowrap}
+.gline{position:absolute;left:0;right:0;border-top:1px dashed #1f242e}
+.vline{position:absolute;top:0;width:0.5px;background:#1f242e}
+.tick{position:absolute;border-left:1px solid var(--line);font-size:9px;color:var(--tx2);padding-left:2px;white-space:nowrap}
+.ev{position:absolute;border-radius:2px;min-width:2px}
+.ev:hover{outline:1px solid #fff}
+.ev.sel{outline:2px solid #fff}
+.tabs{display:flex;gap:6px;margin-bottom:8px}
+.tabs button.on{border-color:var(--acc);color:var(--acc)}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border-bottom:1px solid var(--line);padding:3px 8px;text-align:left;white-space:nowrap}
+th{color:var(--tx2);background:var(--panel);font-weight:500}
+tr.removed td{color:var(--del);text-decoration:line-through}
+tr.removed td.reason{text-decoration:none;color:var(--tx2)}
+td.mono,th.mono{font-family:Consolas,monospace}
+tr.hl td{background:#243044}
+tr.cat td{color:var(--acc);font-weight:600;background:var(--panel2)}
+tr.tie td.tcell{color:var(--warn)}
+.dt{color:var(--tx2)}
+#note{color:var(--tx2);font-size:11px;margin-top:10px;line-height:1.7}
+button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:4px;padding:3px 10px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+.warnline{color:var(--warn);font-size:11px;margin:4px 0}
+.hint{color:var(--tx2);font-size:11px}
+#mdBox{display:none;margin-top:8px}
+#mdOut{width:100%;height:150px;background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;font:11px/1.4 Consolas,monospace}
+/* 事件条视觉宽度仍按 px/帧 缩放（最小 2px），但用透明 ::after 把命中区撑到 ≥10px ⇒ 手机上点得中 */
+.ev::after{content:"";position:absolute;left:-4px;right:-4px;top:-6px;bottom:-6px}
+/* 详情条：桌面靠 title 悬浮提示，移动端不显示 title ⇒ 选中后把同一串信息落到这里 */
+#evInfo{margin-bottom:8px;padding:5px 9px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;font-size:12px;color:var(--tx2)}
+#paneQ,#paneS{overflow-x:auto}
+#panelBtn{display:none}
+@media (max-width:860px){
+  #panelBtn{display:inline-block}
+  body{font-size:14px}
+  main{flex-direction:column;align-items:stretch}
+  aside{width:auto;min-width:0;max-height:none;border-right:0;border-bottom:1px solid var(--line)}
+  aside.folded{display:none}
+  #mainArea{padding:8px 10px}
+  header{gap:8px;padding:8px 10px}
+  header h1{font-size:14px}
+  button{padding:7px 14px;font-size:14px}
+  select,input[type=text],input[type=number]{font-size:14px;padding:6px 9px;min-height:34px}
+  .gateRow input{width:84px}
+  .cRow{grid-template-columns:1fr 110px}
+  .eRow{grid-template-columns:1fr 84px}
+  table{font-size:13px}
+  th,td{padding:5px 9px}
+  #note,.src,.hint,.warnline{font-size:12px}
+  #tlGutter{width:96px;min-width:96px}
+  #evInfo{font-size:13px}
+}
+</style>
+</head>
+<body>
+<header>
+  <button id="panelBtn">参数</button>
+  <h1>波次帧账分析器</h1>
+  <select id="sampleSel"></select>
+  <label class="file">导入关卡 JSON<input type="file" id="fileIn" accept=".json"></label>
+  <span id="totalInfo"></span>
+  <span style="margin-left:auto;color:var(--tx2);font-size:12px">px/帧 <input type="range" id="zoom" min="0.05" max="2" step="0.05" value="0.35"></span>
+</header>
+<main>
+  <aside id="panel">
+    <h3>数据库（映射）</h3>
+    <div id="mapStatus"></div>
+    <div class="mapBtns">
+      <label class="file">导入映射<input type="file" id="mapIn" accept=".json,.js" multiple></label>
+      <button id="mapClear">清除映射</button>
+    </div>
+    <div id="mapMsg"></div>
+    <div class="src">映射数据独立于工具主体保存。支持直接导入 JSON 映射表、
+      本工具的 <code>wave-mappings.js</code>，以及多个映射文件合并导入。
+      文件也可直接拖到页面上。</div>
+
+    <h3>随机组（randomSpawnGroupKey）</h3>
+    <div id="randGroups"></div>
+    <div id="randBtns" style="margin:6px 0">
+      <button id="randAll">按权重随机全部</button>
+      <button id="emptyAll">全部不出</button>
+    </div>
+    <div class="warnline" id="randWarn"></div>
+
+    <h3>隐藏组（hiddenGroup）</h3>
+    <div id="hiddenGroups"></div>
+    <div style="margin:6px 0"><button id="hgFromRunes">按 runes 自动勾选</button></div>
+    <div class="warnline">默认全部未启用；勾选 = 该组条目入队执行</div>
+
+    <h3>波次门（填清场时刻）</h3>
+    <div id="gates"></div>
+    <div class="warnline">门等待的是「本波敌人全部离场」（击杀 / 漏过 / 显式释放），不是"出怪出完"。
+      填<b>清场时刻</b>（绝对，秒或帧，两个框同步），工具会反推等待帧数；留空按 1 帧处理。
+      等待帧数至少为 1；清场早于门起点时，该波门只占 1 帧。</div>
+
+    <h3>计算参数</h3>
+    <div id="consts"></div>
+    <div style="margin:6px 0"><button id="constReset">恢复默认</button></div>
+    <div class="warnline">偏离默认时，两张表会多出「Δ基准」列</div>
+
+    <h3>delayToBorn（按敌人覆盖）</h3>
+    <div id="delays"></div>
+    <div class="warnline">留空 = 使用映射数据中的默认值；修改后会同步平移该敌人的相关展示条目。</div>
+
+    <h3>口径</h3>
+    <div id="note">
+      当前计算口径：<br>
+      ① 随机组按权重选择一个候选：候选是一整组随机包，或一条独立条目；选中后该候选整体生效、其余候选不生成；候选为空时该组不生成任何条目；<br>
+      ② 空片段至少占用 1 帧；<br>
+      ③ 波次门至少占用 1 帧，等待的是本波敌人全部离场；<br>
+      ④ <code>delayToBorn</code> 用于调整出生时刻，单位变体会按可用映射回退到基础条目。<br>
+      <span class="dt">「费用条」列 = 另一个常用口径：<b>费用条帧 = 全局帧 − 1</b>（全局第 0 帧无对应，记 <code>—</code>）。
+      如果按费用条坐标记录帧号，可直接查看这一列；在通常使用范围内，两列只相差 1 帧。</span><br>
+      <span class="dt">映射数据不内嵌在工具主体中：同目录的 <code>wave-mappings.js</code> 会自动加载，
+      也可以通过左侧面板导入其他版本的映射数据。</span><br>
+      <span class="dt">当前未处理 <code>blockFragment</code>；计算时按 false 处理。</span>
+    </div>
+  </aside>
+  <section id="mainArea">
+    <div id="tlWrap"><div id="tl"><div id="tlGutter"></div><div id="tlPlot"></div></div></div>
+    <div id="evInfo">点时间轴上的条目看详情（桌面端悬停即可，移动端点一下显示在这里）</div>
+    <div class="tabs">
+      <button id="tabQ" class="on">逐条目账</button>
+      <button id="tabS">出怪时刻表</button>
+    </div>
+
+    <div id="paneQ">
+      <table id="tbl"><thead><tr>
+        <th>#</th><th>帧</th><th>时间</th><th title="另一个常用口径：费用条帧 = 全局帧 − 1">费用条</th>
+        <th>波次.兵团.小队</th><th>类型</th><th>key / 敌人</th>
+        <th class="mono">t(s)</th><th>路由</th><th>状态</th><th id="thQdt" style="display:none">Δ基准</th><th>组</th>
+      </tr></thead><tbody id="tbody"></tbody></table>
+    </div>
+
+    <div id="paneS" style="display:none">
+      <div style="margin-bottom:6px">
+        <button id="mdBtn">导出 Markdown</button>
+        <span class="hint">Δ = 本条目帧 − 本波第一只出生帧（同波内算，不受 S / G 影响）</span>
+      </div>
+      <table id="tblS"><thead><tr>
+        <th>#</th><th>敌人</th><th>路线</th><th>波次.兵团.小队</th><th>帧</th><th>秒:帧</th>
+        <th title="另一个常用口径：费用条帧 = 全局帧 − 1">费用条</th><th>Δ</th><th>同刻</th><th id="thSdt" style="display:none">Δ基准</th>
+      </tr></thead><tbody id="tbodyS"></tbody></table>
+      <div id="mdBox"><textarea id="mdOut" readonly></textarea></div>
+    </div>
+  </section>
+</main>
+<script id="wave-core">
+const CORE = (() => {
+  const DT = 69905 / Math.pow(2, 21);
+  const DEF = { exec: 1, handoff: 2, preMs: 90000, itvMs: 9000, cnt: 2 };
+  const RANDOM_TYPES = new Set(["SPAWN", "ACTIVATE_PREDEFINED", "EMPTY"]);
+  const MULTI_TYPES = new Set(["SPAWN", "PREVIEW_CURSOR"]);
+
+  const roundHalfUp = x => Math.floor(x + 0.5);
+  const mtOf = sec => roundHalfUp(sec * 30000);
+  const mtToFrames = ms => Math.max(0, Math.floor((ms + 500) / 1000));
+  const waitRef = ms => ms <= 0 ? 0 : Math.max(1, mtToFrames(ms));
+  const wavePreFrames = sec => Math.max(1, roundHalfUp(sec / DT));
+  // 清场时刻（秒）↔ 清场帧（绝对帧号）。
+  const secToFrame = sec => Math.max(0, roundHalfUp(sec / DT));
+  const frameToSec = f => +(f * DT).toFixed(2);
+  // `秒:帧` 记号：每秒 30 帧。
+  const fmtSecond = f => Math.floor(f / 30) + "s" + String(f % 30).padStart(2, "0");
+  // 费用条坐标系：不少玩家按「费用条帧」计帧，它比全局帧**少 1**
+  // （全局第 k 帧 = 费用条第 k−1 帧）。全局第 0 帧在费用条坐标里不存在（会算成 −1）⇒ 记 "—"。
+  const fmtSecondFee = f => (f > 0 ? fmtSecond(f - 1) : "—");
+
+  function monoQuickSort(items) {
+    const a = items.slice();
+    const cmp = (x, y) => x.t < y.t ? -1 : (x.t > y.t ? 1 : 0);
+    (function sort(lo, hi) {
+      while (lo < hi) {
+        let i = lo, j = hi;
+        const p = a[(lo + hi) >> 1];
+        while (true) {
+          while (cmp(a[i], p) < 0) i++;
+          while (cmp(p, a[j]) < 0) j--;
+          if (i <= j) { const t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
+          if (i > j) break;
+        }
+        if (lo < j) sort(lo, j);
+        lo = i;
+      }
+    })(0, a.length - 1);
+    return a;
+  }
+
+  // 敌人 key → delayToBorn 的查询起点：本关若覆写了 prefabKey（`enemyDbRefs.overwrittenData`），
+  // 预制体就换了 ⇒ delayToBorn 以 prefabKey 为准。
+  // prefabKey 覆盖时，以覆盖后的预制体作为 delayToBorn 查询起点。
+  function prefabStartOf(key, refs) {
+    const r = refs && refs[key];
+    return (r && r.pk) ? r.pk : key;
+  }
+  function chainOf(start) {                       // 自己 + 逐级砍下划线（变体 id 回退 base id）
+    const out = [start];
+    let k = start;
+    while (k.indexOf("_") >= 0) { k = k.slice(0, k.lastIndexOf("_")); out.push(k); }
+    return out;
+  }
+  function delayFor(key, delayMap, override, refs) {
+    if (!key) return 0;
+    if (override && override[key] != null && override[key] !== "") return parseFloat(override[key]) || 0;
+    if (!delayMap) return 0;
+    for (const c of chainOf(prefabStartOf(key, refs))) if (delayMap[c] != null) return delayMap[c];
+    return 0;
+  }
+  function delaySrc(key, delayMap, override, refs) {
+    if (!key) return "—";
+    if (override && override[key] != null && override[key] !== "") return "覆盖";
+    if (!delayMap) return "无映射";
+    const start = prefabStartOf(key, refs);
+    const tag = start !== key ? "覆写预制体 " : "";
+    for (const c of chainOf(start)) if (delayMap[c] != null) return tag + c;
+    return start !== key ? "覆写预制体·0" : "0（未登记）";
+  }
+  // 本关覆写过的敌人变体（`enemyDbRefs.overwrittenData`）
+  function refInfo(level, k) { return ((level && level.refs) || {})[k] || null; }
+
+  // ---------- 外部映射数据解析 ----------
+  // 导入文件可以是单张映射表，也可以是本工具的合并格式；
+  // 这里统一转换为工具内部使用的数据结构。
+  function classifyMapping(o) {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    if (o.unitNames || o.delayBorn || o.levelNames || o.trapClass) return "merged";
+    if (o.details && typeof o.details === "object") return "topicTable";        // roguelike_topic_table
+    const vs = Object.values(o).filter(v => v && typeof v === "object");
+    if (vs.length < 3) return null;
+    const frac = k => vs.filter(v => v[k] !== undefined).length / vs.length;
+    if (frac("delayToBorn") > 0.3 || frac("prefabKey") > 0.3) return "enm";     // enm_pfb_mapping
+    if (frac("moveSpeed") > 0.5 || frac("description") > 0.5) return "unit";    // unit_mapping
+    if (frac("type") > 0.5 && frac("name") > 0.5) return "unit";
+    if (vs.every(v => Object.keys(v).every(k => k === "code" || k === "name"))) return "level";
+    return null;
+  }
+  function mappingFromTable(kind, o) {
+    const out = {};
+    if (kind === "merged") {
+      ["unitNames", "delayBorn", "levelNames", "trapClass"].forEach(k => {
+        if (o[k] && typeof o[k] === "object") out[k] = o[k];
+      });
+      return Object.keys(out).length ? out : null;
+    }
+    if (kind === "unit") {
+      const n = {};
+      Object.entries(o).forEach(([k, v]) => { if (v && v.name) n[k] = v.name; });
+      if (!Object.keys(n).length) return null;
+      out.unitNames = n;
+    } else if (kind === "enm") {
+      const n = {}, d = {};
+      Object.entries(o).forEach(([k, v]) => {
+        if (!v) return;
+        if (v.name) n[k] = v.name;
+        if (v.delayToBorn) d[k] = v.delayToBorn;
+      });
+      if (Object.keys(n).length) out.unitNames = n;
+      if (Object.keys(d).length) out.delayBorn = d;
+      if (!Object.keys(out).length) return null;
+    } else if (kind === "level") {
+      const lv = {};
+      Object.entries(o).forEach(([k, v]) => {
+        if (v && (v.name || v.code)) lv[k] = { code: v.code || "", name: v.name || "" };
+      });
+      if (!Object.keys(lv).length) return null;
+      out.levelNames = lv;
+    } else if (kind === "topicTable") {
+      const tc = {};
+      Object.entries(o.details || {}).forEach(([t, det]) => {
+        const gc = (det || {}).gameConst || {}, keep = {};
+        Object.entries(gc).forEach(([k, v]) => { if (/Box|Trap|mimic/.test(k)) keep[k] = v; });
+        if (Object.keys(keep).length) tc[t] = keep;
+      });
+      if (!Object.keys(tc).length) return null;
+      out.trapClass = tc;
+    } else {
+      return null;
+    }
+    return out;
+  }
+  // 文本 → 对象：先按 JSON 解析；失败再按 `window.WAVE_MAPPINGS = {…};` 的 .js 形式提取
+  function parseMappingText(txt) {
+    if (typeof txt !== "string") return null;
+    try { return JSON.parse(txt); } catch (e) { /* 继续试 .js 形式 */ }
+    const m = txt.match(/WAVE_MAPPINGS\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+    if (!m) return null;
+    try { return JSON.parse(m[1]); } catch (e) { return null; }
+  }
+
+  // 展开一个片段的 action 队列（毫帧口径；SPAWN 扣 delayToBorn 并钳零；合成条目随 base 平移）
+  // `origin` = 传入条目在**原始片段** actions[] 里的下标 ⇒ 条目的 `act` 用原始下标，
+  // 这样过滤掉随机组/隐藏组后，条目下标仍与关卡配置对得上。
+  function buildQueue(actions, fragPre, ctx, origin) {
+    const C = ctx.C, items = [];
+    actions.forEach((act, ai) => {
+      const oi = origin ? origin[ai] : ai;
+      const atype = act.actionType;
+      let base = mtOf(fragPre + parseFloat(act.preDelay || 0));
+      let count = parseInt(act.count || 0, 10);
+      let step;
+      const mgd = act.managedByScheduler !== false;
+      const hg = act.hiddenGroup || "", rg = act.randomSpawnGroupKey || "";
+      if (MULTI_TYPES.has(atype)) {
+        if (atype === "PREVIEW_CURSOR") count = C.cnt;
+        step = mtOf(parseFloat(act.interval || 0));
+        if (atype === "PREVIEW_CURSOR") step = C.itvMs;
+        if (atype === "SPAWN") base = Math.max(0, base - mtOf(delayFor(act.key, ctx.delayMap, ctx.delayOverride, ctx.refs)));
+        for (let i = 0; i < count; i++)
+          items.push({ kind: atype, key: act.key || "", route: act.routeIndex, act: oi, seq: i, t: base + step * i, syn: false, mgd, hg, rg });
+        if (atype === "SPAWN" && act.autoPreviewRoute) {          // 自动生成对应的预览条目
+          const start = base - C.preMs;
+          for (let k = 0; k < C.cnt; k++)
+            items.push({ kind: "PREVIEW_CURSOR", key: act.key || "", route: act.routeIndex, act: oi, seq: count + k, t: start + C.itvMs * k, syn: true, mgd: false, hg, rg });
+        }
+        if (atype === "SPAWN" && act.autoDisplayEnemyInfo)
+          items.push({ kind: "DISPLAY_ENEMY_INFO", key: act.key || "", route: act.routeIndex, act: oi, seq: count + C.cnt, t: base, syn: true, mgd: false, hg, rg });
+      } else {
+        items.push({ kind: atype, key: act.key || "", route: act.routeIndex, act: oi, seq: 0, t: base, syn: false, mgd, hg, rg });
+      }
+    });
+    return items;
+  }
+
+  // ---------- 随机组：组 → 随机包 → 候选 ----------
+  // 一个组由同一片段内相同组键的条目构成：带组键的条目开组（并记住它所属的隐藏组）；
+  // 只有包键的条目组键被省略、归属最近的组 —— **但必须与该组声明者同属一个隐藏组**，
+  // 否则不归属（这类条目归隐藏组管理）；两个键都没有的条目不参与随机。
+  // 组内按随机包分桶，没有包键的条目各自成一桶。
+  // 每个候选桶的权重由桶内带组键的那条给出；抽中一个桶时桶内条目整体生效，其余候选全部移除。
+  function isEmptyBucket(actions, b) {
+    return b.members.every(i => !(actions[i] || {}).key);
+  }
+  function splitRandomGroups(actions) {
+    const groups = new Map();                      // gkey → [{packKey, weight, members:[actIndex]}]
+    let cur = null, curHidden = "";
+    (actions || []).forEach((a, i) => {
+      if (!RANDOM_TYPES.has(a.actionType)) return;  // 非随机类动作不参与分组
+      const g = a.randomSpawnGroupKey, pk = a.randomSpawnGroupPackKey, hid = a.hiddenGroup || "";
+      if (g) { cur = g; curHidden = hid; }
+      else if (!pk || hid !== curHidden) { cur = null; return; }   // 都不是本组成员
+      if (!cur) return;                            // 只有包键但前面没有组 ⇒ 不归属
+      if (!groups.has(cur)) groups.set(cur, []);
+      const buckets = groups.get(cur);
+      let b = pk ? (buckets.find(x => x.packKey === pk) || null) : null;
+      if (!b) { b = { packKey: pk || "", weight: 0, declared: false, members: [] }; buckets.push(b); }
+      if (g && !b.declared) { b.weight = parseInt(a.weight || 0, 10); b.declared = true; }
+      b.members.push(i);
+    });
+    groups.forEach(buckets => buckets.forEach(b => {
+      if (!b.declared) b.weight = parseInt((actions[b.members[0]] || {}).weight || 0, 10);
+    }));
+    return groups;
+  }
+
+  // 过滤：随机组（预处理阶段移除）→ 隐藏组（入队前过滤）
+  function filterActions(actions, localChoice, hiddenEnabled) {
+    const removed = new Map();
+    const groups = splitRandomGroups(actions);
+    const pickOf = new Map();                      // gkey → 选中候选的代表下标
+    groups.forEach((buckets, gk) => {
+      const pick = localChoice ? localChoice[gk] : undefined;
+      let bi = (pick == null) ? -1 : buckets.findIndex(b => b.members.indexOf(pick) >= 0);
+      if (bi < 0) bi = buckets.findIndex(b => isEmptyBucket(actions, b));   // 默认优先“不出”候选
+      if (bi < 0) bi = 0;
+      const chosen = buckets[bi];
+      pickOf.set(gk, chosen.members[0]);
+      const empty = isEmptyBucket(actions, chosen);
+      const nameOfBucket = b => b.packKey ? "包 " + b.packKey : (actions[b.members[0]].key || "empty");
+      buckets.forEach((b, n) => {
+        if (n === bi && !empty) return;            // 选中的非空候选 ⇒ 整桶保留
+        b.members.forEach(i => removed.set(i, empty
+          ? "随机组抽中空" + (chosen.packKey ? "包 " + chosen.packKey : "条目") + "，整组删除（0 条目）"
+          : "随机组未抽中（选中 " + nameOfBucket(chosen) +
+            (chosen.members.length > 1 ? "，" + chosen.members.length + " 条" : "") + "）"));
+      });
+    });
+    (actions || []).forEach((a, i) => {
+      if (removed.has(i)) return;
+      if (a.hiddenGroup && !(hiddenEnabled && hiddenEnabled[a.hiddenGroup]))
+        removed.set(i, "隐藏组 " + a.hiddenGroup + " 未启用");
+    });
+    const active = [];
+    (actions || []).forEach((a, i) => { if (!removed.has(i)) active.push(i); });
+    return { active, removed, groups, pickOf };
+  }
+
+  // 每个波次片段使用独立的组键，避免不同片段中的同名随机组互相影响。
+  function groupPrefix(wi, fi) { return "w" + wi + ".f" + fi + "."; }
+
+  // ---------- 单位 key → 本体 key → 中文名 ----------
+  // 关卡里 action 用的 key 可能是"仅本关有效"的实例别名（`trap_321_shnbox#1`），
+  // 本体 key 只写在本关 JSON 的 predefines（`alias → inst.characterKey`）或 enemies（`alias → key`）里。
+  // 解析顺序：本关 aliases → 退掉 `#N` → 本关 localNames → 全局 unitNames → 逐级砍下划线（变体回退 base）
+  function baseKeyOf(level, k) {
+    if (!k) return "";
+    const a = (level && level.aliases) || {};
+    if (a[k]) return a[k];
+    const i = k.indexOf("#");
+    return i > 0 ? k.slice(0, i) : k;
+  }
+  function unitName(level, names, k) {
+    if (!k) return "";
+    const rf = (level && level.refs) || {};
+    if (rf[k] && rf[k].n) return rf[k].n;          // ① 关卡 enemyDbRefs 自定义名（最具体）
+    const ln = (level && level.localNames) || {};
+    if (ln[k]) return ln[k];                       // ② 关卡 enemies[].name
+    const b = baseKeyOf(level, k);
+    if (rf[b] && rf[b].n) return rf[b].n;
+    if (ln[b]) return ln[b];
+    if (names && names[b]) return names[b];         // ③ 全局 unit_mapping
+    let c = b;
+    while (c.indexOf("_") >= 0) {                   // ④ 逐级砍下划线（基型 id）
+      c = c.slice(0, c.lastIndexOf("_"));
+      if (names && names[c]) return names[c];
+    }
+    return "";
+  }
+
+  function groupsOfLevel(level) {
+    const out = [];
+    (level.waves || []).forEach((w, wi) => (w.fragments || []).forEach((f, fi) => {
+      const acts = f.actions || [];
+      splitRandomGroups(acts).forEach((buckets, gk) => {
+        out.push({ key: groupPrefix(wi, fi) + gk, raw: gk, wave: wi, frag: fi,
+                   actions: acts, buckets });
+      });
+    }));
+    return out;
+  }
+
+  // 默认选择：优先"不出"的候选，否则第一个候选
+  function defaultChoices(level) {
+    const ch = {};
+    groupsOfLevel(level).forEach(g => {
+      const emp = g.buckets.find(b => isEmptyBucket(g.actions, b));
+      ch[g.key] = (emp || g.buckets[0]).members[0];
+    });
+    return ch;
+  }
+
+  // runes 里声明的隐藏组启用集（union across 难度；`_disable` 后置覆盖）
+  function groupsFromRunes(level) {
+    const en = new Set(), dis = new Set();
+    (level.runes || []).forEach(r => {
+      if (!r || !r.group) return;
+      if (r.key === "level_hidden_group_enable") en.add(r.group);
+      else if (r.key === "level_hidden_group_disable") dis.add(r.group);
+    });
+    dis.forEach(g => en.delete(g));
+    return en;
+  }
+
+  function compute(level, opts) {
+    opts = opts || {};
+    const C = Object.assign({}, DEF, opts.const || {});
+    const ctx = { C, delayMap: opts.delayMap, delayOverride: opts.delayOverride, refs: level.refs || {} };
+    const waves = level.waves || [];
+    const out = { constUsed: C, waves: [], events: [], removedRows: [], spawnTable: [], enemies: [], totalFrames: 0 };
+    const enemyMap = new Map();
+    let cursor = 0;
+
+    waves.forEach((wave, wi) => {
+      const wInfo = { index: wi, start: cursor, gateStart: 0, gate: 0, gateMax: null,
+                      gateMode: "infinite", managed: 0, fragRanges: [] };
+      cursor += wavePreFrames(parseFloat(wave.preDelay || 0));
+
+      (wave.fragments || []).forEach((frag, fi) => {
+        const pre = groupPrefix(wi, fi);
+        const local = {};
+        Object.keys(opts.randomChoice || {}).forEach(k => {
+          if (k.indexOf(pre) === 0) local[k.slice(pre.length)] = opts.randomChoice[k];
+        });
+        const fr = filterActions(frag.actions || [], local, opts.hiddenEnabled);
+        fr.removed.forEach((reason, i) => out.removedRows.push({
+          wave: wi, frag: fi, act: i,
+          key: (frag.actions[i] || {}).key || "",
+          type: (frag.actions[i] || {}).actionType,
+          hg: (frag.actions[i] || {}).hiddenGroup || "",
+          rg: (frag.actions[i] || {}).randomSpawnGroupKey || "",
+          reason }));
+
+        const fragStart = cursor;
+        let items = buildQueue(fr.active.map(i => frag.actions[i]), parseFloat(frag.preDelay || 0), ctx, fr.active);
+        if (!items.length) {                    // ★ 空片段：使用固定的 1 帧收尾。
+          cursor += 1;
+          wInfo.fragRanges.push({ frag: fi, from: fragStart, to: cursor, empty: true });
+          return;
+        }
+        items = monoQuickSort(items);
+        let cur = 0, last = cursor - 1, prev = 0;
+        items.forEach((it, qi) => {
+          const actual = qi === 0 ? cursor + waitRef(it.t)
+                                  : last + C.exec + waitRef(it.t - prev);
+          if (it.kind === "SPAWN") {
+            if (it.mgd) wInfo.managed += 1;
+            if (!enemyMap.has(it.key))
+              enemyMap.set(it.key, { key: it.key,
+                delay: delayFor(it.key, ctx.delayMap, ctx.delayOverride, ctx.refs),
+                src: delaySrc(it.key, ctx.delayMap, ctx.delayOverride, ctx.refs) });
+          }
+          out.events.push({ wave: wi, frag: fi, act: it.act, seq: it.seq, kind: it.kind,
+                            key: it.key, route: it.route, syn: it.syn, frame: actual, t: it.t,
+                            hg: it.hg, rg: it.rg });
+          prev = it.t; last = actual;
+        });
+        cursor = last + C.handoff;
+        wInfo.fragRanges.push({ frag: fi, from: fragStart, to: cursor, empty: false });
+      });
+
+      // ---- 波次门 ----
+      // 门等待本波敌人全部离场，而不是仅等待所有出生动作结束。
+      wInfo.gateStart = cursor;
+      const isLast = wi === waves.length - 1;
+      const mt = wave.maxTimeWaitingForNextWave;
+      const timeout = !isLast && mt != null && mt >= 0;
+      wInfo.gateMode = timeout ? "timeout" : "infinite";
+      wInfo.gateMax = timeout ? Math.max(1, roundHalfUp(mt / DT)) : null;
+      // 门 G 的两种给法：
+      //   ① clearFrames[wi]（面板默认口径）—— 清场的**绝对帧**，G = max(1, 清场帧 − 门起点帧)。
+      //      ★ 无循环依赖：处理到本波时 cursor 已经就是门起点（前序波已顺序累加完）。
+      //   ② gates[wi]（对拍脚本用）—— 直接给 G 帧数。
+      // 下界恒 ≥ 1：波次门至少占用 1 帧。
+      const cf = opts.clearFrames ? opts.clearFrames[wi] : null;
+      let g;
+      if (cf != null && cf !== "" && !isNaN(cf)) {
+        wInfo.clearFrame = Math.round(cf);
+        g = Math.max(1, wInfo.clearFrame - cursor);
+      } else {
+        g = (opts.gates && opts.gates[wi] != null && opts.gates[wi] !== "") ? parseInt(opts.gates[wi], 10) : null;
+        if (g == null || isNaN(g)) g = 1;
+        else g = Math.max(1, g);
+      }
+      wInfo.gate = g;
+      cursor += g;
+      cursor += wavePreFrames(parseFloat(wave.postDelay || 0));
+      wInfo.end = cursor;
+      out.waves.push(wInfo);
+    });
+    out.totalFrames = cursor;
+
+    // ---- D3 出怪时刻表 ----
+    const keyOf = e => e.wave + "/" + e.frag + "/" + e.t;
+    const allCnt = new Map();
+    out.events.forEach(e => allCnt.set(keyOf(e), (allCnt.get(keyOf(e)) || 0) + 1));
+    const firstOfWave = {};
+    const spawns = out.events.filter(e => e.kind === "SPAWN");
+    spawns.forEach(e => { if (firstOfWave[e.wave] == null) firstOfWave[e.wave] = e.frame; });
+    out.spawnTable = spawns.map((e, n) => ({
+      n: n + 1, wave: e.wave, frag: e.frag, act: e.act, seq: e.seq,
+      key: e.key, route: e.route, frame: e.frame, t: e.t,
+      delta: e.frame - firstOfWave[e.wave],
+      secondFrame: fmtSecond(e.frame),
+      secondFrameFee: fmtSecondFee(e.frame),
+      tie: (allCnt.get(keyOf(e)) || 0) > 1,
+    }));
+    out.enemies = [...enemyMap.values()].sort((a, b) => a.key < b.key ? -1 : 1);
+    return out;
+  }
+
+  return { DT, DEF, waitRef, wavePreFrames, secToFrame, frameToSec, fmtSecond, fmtSecondFee,
+           monoQuickSort, buildQueue, splitRandomGroups, isEmptyBucket,
+           filterActions, groupsOfLevel, defaultChoices, groupsFromRunes, compute, delayFor, delaySrc,
+           baseKeyOf, unitName, refInfo, RANDOM_TYPES,
+           classifyMapping, mappingFromTable, parseMappingText };
+})();
+if (typeof window !== "undefined") window.CORE = CORE;
+</script>
+<!-- 外部映射数据库：与 HTML 同目录的 wave-mappings.js。
+     文件缺失时工具仍可运行，但名称、延迟等映射信息不可用。 -->
+<script id="wave-maps-loader" src="wave-mappings.js" onerror="window.__waveMapsMissing = 1"></script>
+<script id="wave-data">
+window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"trap_139_dhtl#1":"trap_139_dhtl","trap_139_dhtl#2":"trap_139_dhtl","trap_139_dhtl#3":"trap_139_dhtl","trap_146_dhdcr#1":"trap_146_dhdcr"},"levelId":"act/act31side/level_act31side_03","refs":{"enemy_1398_dhdcr_b":{"n":"天桩-甲","ov":["name","description","prefabKey","attributes","applyWay","motion","enemyTags","lifePointReduce","levelType","rangeRadius","numOfExtraDrops","viewRadius","notCountInTotal"],"pk":"enemy_1398_dhdcr"},"enemy_1399_dhtb_b":{"n":"天桩-乙","ov":["name","description","prefabKey","attributes","applyWay","motion","enemyTags","lifePointReduce","levelType","rangeRadius","numOfExtraDrops","viewRadius","notCountInTotal"],"pk":"enemy_1399_dhtb"}},"runes":[{"difficultyMask":"ALL","group":"env_010_act31side_pollute","key":"env_system_new"}],"tokens":["trap_139_dhtl","trap_139_dhtl#1","trap_139_dhtl#2","trap_139_dhtl#3","trap_146_dhdcr","trap_146_dhdcr#1"],"waves":[{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":true,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1395_dhxts","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":0,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1395_dhxts","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":1,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1390_dhsbr","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":2,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1390_dhsbr","managedByScheduler":true,"preDelay":6.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":3,"weight":0}],"preDelay":5.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1390_dhsbr","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":4,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1390_dhsbr","managedByScheduler":true,"preDelay":6.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":5,"weight":0}],"preDelay":15.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":5.0,"key":"enemy_1395_dhxts","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":6,"weight":0}],"preDelay":15.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":13.0,"key":"enemy_1390_dhsbr","managedByScheduler":true,"preDelay":4.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":7,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":13.0,"key":"enemy_1390_dhsbr","managedByScheduler":true,"preDelay":6.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":8,"weight":0}],"preDelay":12.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":4,"hiddenGroup":null,"interval":4.0,"key":"enemy_1395_dhxts","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":4,"hiddenGroup":null,"interval":4.0,"key":"enemy_1395_dhxts","managedByScheduler":true,"preDelay":4.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0}],"preDelay":12.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":13.0,"key":"enemy_1390_dhsbr","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":11,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":true,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1392_dhshld","managedByScheduler":true,"preDelay":11.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":12,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":13.0,"key":"enemy_1390_dhsbr","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":13,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":5,"hiddenGroup":null,"interval":3.0,"key":"enemy_1395_dhxts","managedByScheduler":true,"preDelay":14.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":14,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":5,"hiddenGroup":null,"interval":3.0,"key":"enemy_1395_dhxts","managedByScheduler":true,"preDelay":15.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":15,"weight":0}],"preDelay":8.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"main/level_main_00-01":{"levelId":"main/level_main_00-01","refs":{"enemy_1002_nsabr":{"ov":["attributes"]}},"runes":[{"difficultyMask":"FOUR_STAR","group":null,"key":"gbuff_lifepoint"},{"difficultyMask":"FOUR_STAR","group":null,"key":"ebuff_attribute"},{"difficultyMask":"FOUR_STAR","group":null,"key":"cbuff_cost_recovery"}],"tokens":[],"waves":[{"fragments":[{"actions":[{"actionType":"STORY","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"obt/tutorial/level/main_00-01","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":0,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"DISPLAY_ENEMY_INFO","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":1,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":2,"weight":0}],"preDelay":2.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":2,"hiddenGroup":null,"interval":2.0,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":3,"weight":0}],"preDelay":8.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":2,"hiddenGroup":null,"interval":0.7,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":4,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":8.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":5,"weight":0}],"preDelay":8.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":2,"hiddenGroup":null,"interval":0.7,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":6,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":0.7,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":10.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":7,"weight":0}],"preDelay":8.0},{"actions":[{"actionType":"DISPLAY_ENEMY_INFO","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1002_nsabr","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":8,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1002_nsabr","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0}],"preDelay":8.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"main/level_main_00-03":{"levelId":"main/level_main_00-03","refs":{"enemy_1002_nsabr":{"ov":["attributes"]}},"runes":[{"difficultyMask":"FOUR_STAR","group":null,"key":"gbuff_lifepoint"},{"difficultyMask":"FOUR_STAR","group":null,"key":"ebuff_attribute"}],"tokens":[],"waves":[{"fragments":[{"actions":[{"actionType":"STORY","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"obt/tutorial/level/main_00-03","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":0,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":2,"hiddenGroup":null,"interval":1.2,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":1,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.2,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":9.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":2,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.2,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":15.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":3,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1002_nsabr","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":4,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1002_nsabr","managedByScheduler":true,"preDelay":4.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":5,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.2,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":6,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.2,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":12.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":7,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.2,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":18.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":8,"weight":0}],"preDelay":11.0},{"actions":[{"actionType":"DISPLAY_ENEMY_INFO","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0}],"preDelay":11.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1002_nsabr","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":11,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1002_nsabr","managedByScheduler":true,"preDelay":8.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":12,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.2,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":13.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":13,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1002_nsabr","managedByScheduler":true,"preDelay":14.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":14,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.2,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":19.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":15,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":20.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":16,"weight":0}],"preDelay":8.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"main/level_main_00-04":{"levelId":"main/level_main_00-04","runes":[{"difficultyMask":"FOUR_STAR","group":null,"key":"gbuff_lifepoint"},{"difficultyMask":"FOUR_STAR","group":null,"key":"ebuff_attribute"},{"difficultyMask":"FOUR_STAR","group":null,"key":"cbuff_excluded"}],"tokens":[],"waves":[{"fragments":[{"actions":[{"actionType":"STORY","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"obt/tutorial/level/main_00-04","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":0,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":1,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.0,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":9.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":2,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":13.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":3,"weight":0}],"preDelay":2.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":2,"hiddenGroup":null,"interval":0.8,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":4,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":0.8,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":13.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":5,"weight":0},{"actionType":"DISPLAY_ENEMY_INFO","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1027_mob","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":6,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1027_mob","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":7,"weight":0}],"preDelay":12.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0},{"fragments":[{"actions":[{"actionType":"DISPLAY_ENEMY_INFO","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":8,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":2,"hiddenGroup":null,"interval":0.8,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":0.8,"key":"enemy_1027_mob","managedByScheduler":true,"preDelay":12.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":11,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":0.8,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":19.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":12,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":15.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":13,"weight":0}],"preDelay":13.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":14,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":18.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":15,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1005_yokai","managedByScheduler":true,"preDelay":23.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":16,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":2,"hiddenGroup":null,"interval":0.8,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":6.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":17,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":0.8,"key":"enemy_1007_slime","managedByScheduler":true,"preDelay":19.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":18,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1027_mob","managedByScheduler":true,"preDelay":26.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":19,"weight":0}],"preDelay":18.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"main/level_main_17-03":{"aliases":{"trap_329_rift#1":"trap_329_rift"},"levelId":"main/level_main_17-03","runes":[{"difficultyMask":"ALL","group":"env_v073_mainline17_ctrl","key":"env_system_new"},{"difficultyMask":"SIX_STAR","group":null,"key":"char_attribute_mul"},{"difficultyMask":"SIX_STAR","group":null,"key":"enemy_attribute_mul"},{"difficultyMask":"SIX_STAR","group":null,"key":"global_lifepoint"}],"tokens":["trap_329_rift","trap_329_rift#1"],"waves":[{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10203_mumag","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":0,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"hidden1","interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":1,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"hidden1","interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":2,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"hidden1","interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":3,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":4,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":8.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":12.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":5,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"DISPLAY_ENEMY_INFO","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":12.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":6,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":7,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":4.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":8.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":8,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0}],"preDelay":10.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":4.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":8.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":11,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":11.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":12,"weight":0}],"preDelay":10.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10203_mumag","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":13,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":14,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":4.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":8.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":15,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":16,"weight":0}],"preDelay":5.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10203_mumag","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":17,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10203_mumag","managedByScheduler":true,"preDelay":12.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":18,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":8.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":8.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":19,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":8.0,"key":"enemy_10201_muinf","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":20,"weight":0}],"preDelay":5.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":21,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":22,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":23,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10204_mudia","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":24,"weight":0}],"preDelay":12.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"memory/level_memory_grani_1":{"levelId":"memory/level_memory_grani_1","runes":[],"tokens":["char_220_grani","char_263_skadi"],"waves":[{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1001_bigbo","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":0,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro_2","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":1,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1027_mob_2","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":2,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1027_mob_2","managedByScheduler":true,"preDelay":15.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":3,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.0,"key":"enemy_1032_katar","managedByScheduler":true,"preDelay":20.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":4,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.0,"key":"enemy_1030_wteeth","managedByScheduler":true,"preDelay":30.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":5,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1030_wteeth","managedByScheduler":true,"preDelay":40.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":6,"weight":0}],"preDelay":5.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1033_handax","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":7,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1034_laxe","managedByScheduler":true,"preDelay":15.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":8,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1035_haxe","managedByScheduler":true,"preDelay":30.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0}],"preDelay":5.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.0,"key":"enemy_1032_katar","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0}],"preDelay":50.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"rogue1/level_rogue1_1-2":{"aliases":{"trap_011_ore#1":"trap_011_ore","trap_011_ore#2":"trap_011_ore","trap_051_vultres#1":"trap_051_vultres","trap_051_vultres#2":"trap_051_vultres"},"levelId":"rogue1/level_rogue1_1-2","refs":{"enemy_1034_laxe":{"ov":["attributes"]},"enemy_1084_sotidm":{"ov":["attributes"]},"enemy_1087_ltwolf":{"ov":["attributes"]}},"runes":[{"difficultyMask":"FOUR_STAR","group":null,"key":"ebuff_attribute"}],"tokens":["trap_011_ore","trap_011_ore#1","trap_011_ore#2","trap_051_vultres","trap_051_vultres#1","trap_051_vultres#2"],"waves":[{"fragments":[{"actions":[{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":0,"weight":50},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_051_vultres#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":1,"weight":25},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_051_vultres#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":2,"weight":25},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_011_ore#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g2","randomSpawnGroupPackKey":null,"routeIndex":3,"weight":50},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_011_ore#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g2","randomSpawnGroupPackKey":null,"routeIndex":4,"weight":50}],"preDelay":0.0},{"actions":[{"actionType":"PREVIEW_CURSOR","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1033_handax","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":5,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1084_sotidm","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":6,"weight":75},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1034_laxe","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":7,"weight":25},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"extra","interval":1.0,"key":"enemy_1080_sotidp_2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"extra","routeIndex":8,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":8.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":12.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":11,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":12,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":7.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":12.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":13,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":8.0,"key":"enemy_1077_sotihd","managedByScheduler":true,"preDelay":10.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":14,"weight":0}],"preDelay":8.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1084_sotidm","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":15,"weight":75},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1034_laxe","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":16,"weight":25}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":4,"hiddenGroup":null,"interval":7.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":17,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":4,"hiddenGroup":null,"interval":8.0,"key":"enemy_1087_ltwolf","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":18,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":10.0,"key":"enemy_1077_sotihd","managedByScheduler":true,"preDelay":12.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":19,"weight":0}],"preDelay":8.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":3,"hiddenGroup":null,"interval":9.0,"key":"enemy_1087_ltwolf","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":20,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":8.0,"key":"enemy_1087_ltwolf","managedByScheduler":true,"preDelay":23.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":21,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":9.0,"key":"enemy_1087_ltwolf","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":22,"weight":70},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1077_sotihd","managedByScheduler":true,"preDelay":12.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":23,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1087_ltwolf","managedByScheduler":true,"preDelay":26.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":24,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1077_sotihd","managedByScheduler":true,"preDelay":32.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":25,"weight":80}],"preDelay":10.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2001_duckmi","managedByScheduler":true,"preDelay":15.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":26,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2002_bearmi","managedByScheduler":true,"preDelay":15.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":27,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":28,"weight":90}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"rogue4/level_rogue4_1-1":{"aliases":{"trap_757_skzbox#1":"trap_757_skzbox","trap_757_skzbox#2":"trap_757_skzbox","trap_758_skzmbx#1":"trap_758_skzmbx","trap_758_skzmbx#2":"trap_758_skzmbx","trap_759_skzwyx#1":"trap_759_skzwyx","trap_759_skzwyx#2":"trap_759_skzwyx","trap_760_skztzs#1":"trap_760_skztzs","trap_760_skztzs#2":"trap_760_skztzs","trap_764_skzshp":"trap_764_skzshp"},"levelId":"rogue4/level_rogue4_1-1","refs":{"enemy_1000_gopro":{"ov":["attributes"]},"enemy_1012_dcross":{"ov":["attributes"]},"enemy_1243_ltswar":{"ov":["attributes"]}},"runes":[{"difficultyMask":"FOUR_STAR","group":null,"key":"enemy_attribute_mul"},{"difficultyMask":"FOUR_STAR","group":"hidden","key":"level_hidden_group_enable"},{"difficultyMask":"FOUR_STAR","group":"normal","key":"level_hidden_group_disable"},{"difficultyMask":"NORMAL","group":"normal","key":"level_hidden_group_enable"},{"difficultyMask":"ALL","group":"hidden_door","key":"level_hidden_group_disable"}],"tokens":["trap_757_skzbox","trap_757_skzbox#1","trap_757_skzbox#2","trap_758_skzmbx","trap_758_skzmbx#1","trap_758_skzmbx#2","trap_759_skzwyx","trap_759_skzwyx#1","trap_759_skzwyx#2","trap_760_skztzs","trap_760_skztzs#1","trap_760_skztzs#2","trap_764_skzshp"],"waves":[{"fragments":[{"actions":[{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":0,"weight":850},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_757_skzbox#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":1,"weight":105},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_758_skzmbx#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":2,"weight":3000},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_759_skzwyx#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":3,"weight":15},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g2","randomSpawnGroupPackKey":null,"routeIndex":4,"weight":850},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_757_skzbox#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g2","randomSpawnGroupPackKey":null,"routeIndex":5,"weight":105},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_758_skzmbx#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g2","randomSpawnGroupPackKey":null,"routeIndex":6,"weight":3000},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_759_skzwyx#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g2","randomSpawnGroupPackKey":null,"routeIndex":7,"weight":15},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"cargo","interval":1.0,"key":"trap_764_skzshp","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":8,"weight":0},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"calamity","interval":1.0,"key":"trap_760_skztzs#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":60.0,"key":"enemy_1243_ltswar","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":10,"hiddenGroup":null,"interval":13.0,"key":"enemy_1071_dftman","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":11,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":"hidden","interval":1.0,"key":"enemy_1243_ltswar","managedByScheduler":true,"preDelay":75.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":12,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":2,"hiddenGroup":"normal","interval":50.0,"key":"enemy_1012_dcross","managedByScheduler":true,"preDelay":60.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":13,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":33.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":14,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":80.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":15,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":120.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":16,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":1.0,"key":"enemy_1000_gopro","managedByScheduler":true,"preDelay":135.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":17,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":true,"autoPreviewRoute":true,"count":1,"hiddenGroup":"hidden_door","interval":1.0,"key":"enemy_2067_skzcy","managedByScheduler":true,"preDelay":110.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":18,"weight":0}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0},{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":19,"weight":85},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2001_duckmi","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":20,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2002_bearmi","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":21,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2034_sythef","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":22,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":true,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2085_skzjxd","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":"g1","randomSpawnGroupPackKey":null,"routeIndex":23,"weight":5}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"rogue6/level_rogue6_1-2":{"aliases":{"trap_320_shtlbx#1":"trap_320_shtlbx","trap_320_shtlbx#2":"trap_320_shtlbx","trap_321_shnbox#1":"trap_321_shnbox","trap_321_shnbox#2":"trap_321_shnbox","trap_322_shrbox#1":"trap_322_shrbox","trap_322_shrbox#2":"trap_322_shrbox","trap_323_shsbox#1":"trap_323_shsbox","trap_323_shsbox#2":"trap_323_shsbox"},"levelId":"rogue6/level_rogue6_1-2","runes":[{"difficultyMask":"FOUR_STAR","group":null,"key":"enemy_attribute_mul"},{"difficultyMask":"FOUR_STAR","group":"raid","key":"level_hidden_group_enable"}],"tokens":["trap_320_shtlbx","trap_320_shtlbx#1","trap_320_shtlbx#2","trap_321_shnbox","trap_321_shnbox#1","trap_321_shnbox#2","trap_322_shrbox","trap_322_shrbox#1","trap_322_shrbox#2","trap_323_shsbox","trap_323_shsbox#1","trap_323_shsbox#2"],"waves":[{"fragments":[{"actions":[{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":0,"weight":850},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_321_shnbox#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":1,"weight":105},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_322_shrbox#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":2,"weight":35},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_320_shtlbx#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":3,"weight":35},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_323_shsbox#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":4,"weight":15},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":5,"weight":850},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_321_shnbox#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":6,"weight":105},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_322_shrbox#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":7,"weight":35},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_320_shtlbx#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":8,"weight":35},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_323_shsbox#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":9,"weight":15}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0},{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"raid","interval":1.0,"key":"enemy_10113_ymgung","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"raid","interval":1.0,"key":"enemy_10113_ymgung","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":11,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"raid","interval":1.0,"key":"enemy_10113_ymgung","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":12,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"raid","interval":1.0,"key":"enemy_10113_ymgung","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":13,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":7,"hiddenGroup":null,"interval":15.0,"key":"enemy_1093_ccsbr","managedByScheduler":true,"preDelay":10.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":14,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":15.0,"key":"enemy_1093_ccsbr","managedByScheduler":true,"preDelay":33.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":15,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":15.0,"key":"enemy_1095_ccripr","managedByScheduler":true,"preDelay":73.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":16,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo","interval":15.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":90.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":17,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo4","interval":15.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":90.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":18,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo4","interval":15.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":90.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":19,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo3","interval":15.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":90.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":20,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo2","interval":15.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":90.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":21,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":25.0,"key":"enemy_10113_ymgung","managedByScheduler":true,"preDelay":30.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":22,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":25.0,"key":"enemy_10113_ymgung","managedByScheduler":true,"preDelay":35.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":23,"weight":0}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0},{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2085_skzjxd","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"c1","randomSpawnGroupPackKey":null,"routeIndex":24,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2001_duckmi","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"c1","randomSpawnGroupPackKey":null,"routeIndex":25,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2002_bearmi","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"c1","randomSpawnGroupPackKey":null,"routeIndex":26,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2034_sythef","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"c1","randomSpawnGroupPackKey":null,"routeIndex":27,"weight":5},{"actionType":"EMPTY","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"c1","randomSpawnGroupPackKey":null,"routeIndex":28,"weight":85}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"rogue6/level_rogue6_2-2":{"aliases":{"trap_015_tree#1":"trap_015_tree","trap_015_tree#2":"trap_015_tree","trap_015_tree#3":"trap_015_tree","trap_015_tree#4":"trap_015_tree","trap_015_tree#5":"trap_015_tree","trap_015_tree#6":"trap_015_tree","trap_320_shtlbx#1":"trap_320_shtlbx","trap_320_shtlbx#2":"trap_320_shtlbx","trap_321_shnbox#1":"trap_321_shnbox","trap_321_shnbox#2":"trap_321_shnbox","trap_322_shrbox#1":"trap_322_shrbox","trap_322_shrbox#2":"trap_322_shrbox","trap_323_shsbox#1":"trap_323_shsbox","trap_323_shsbox#2":"trap_323_shsbox"},"levelId":"rogue6/level_rogue6_2-2","runes":[{"difficultyMask":"FOUR_STAR","group":null,"key":"enemy_attribute_mul"},{"difficultyMask":"NORMAL","group":"dog","key":"level_hidden_group_enable"},{"difficultyMask":"FOUR_STAR","group":"flower","key":"level_hidden_group_enable"}],"tokens":["trap_015_tree","trap_015_tree#1","trap_015_tree#2","trap_015_tree#3","trap_015_tree#4","trap_015_tree#5","trap_015_tree#6","trap_016_peon","trap_320_shtlbx","trap_320_shtlbx#1","trap_320_shtlbx#2","trap_321_shnbox","trap_321_shnbox#1","trap_321_shnbox#2","trap_322_shrbox","trap_322_shrbox#1","trap_322_shrbox#2","trap_323_shsbox","trap_323_shsbox#1","trap_323_shsbox#2"],"waves":[{"fragments":[{"actions":[{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":0,"weight":850},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_323_shsbox#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":1,"weight":15},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_320_shtlbx#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":2,"weight":35},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_321_shnbox#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":3,"weight":105},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_322_shrbox#1","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t1","randomSpawnGroupPackKey":null,"routeIndex":4,"weight":35},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":5,"weight":850},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_323_shsbox#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":6,"weight":15},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_320_shtlbx#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":7,"weight":35},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_321_shnbox#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":8,"weight":105},{"actionType":"ACTIVATE_PREDEFINED","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"trap_322_shrbox#2","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"t2","randomSpawnGroupPackKey":null,"routeIndex":9,"weight":35}],"preDelay":0.0},{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"hua","randomSpawnGroupPackKey":"s","routeIndex":10,"weight":50},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"s","routeIndex":11,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"s","routeIndex":12,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10003_trwlpl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"s","routeIndex":13,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10003_trwlpl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"s","routeIndex":14,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10003_trwlpl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"s","routeIndex":15,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10003_trwlpl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"hua","randomSpawnGroupPackKey":"d","routeIndex":16,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10003_trwlpl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"d","routeIndex":17,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10003_trwlpl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"d","routeIndex":18,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"d","routeIndex":19,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"d","routeIndex":20,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"d","routeIndex":21,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"d","routeIndex":22,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"d","routeIndex":23,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":"hua","randomSpawnGroupPackKey":"e","routeIndex":24,"weight":50},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"e","routeIndex":25,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"e","routeIndex":26,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"e","routeIndex":27,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"e","routeIndex":28,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"e","routeIndex":29,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"e","routeIndex":30,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"e","routeIndex":31,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":0.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":"e","routeIndex":32,"weight":10},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":5,"hiddenGroup":"dog","interval":28.0,"key":"enemy_2133_shdopl","managedByScheduler":true,"preDelay":50.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":33,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":"flower","interval":37.0,"key":"enemy_10003_trwlpl","managedByScheduler":true,"preDelay":65.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":34,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":7,"hiddenGroup":null,"interval":18.0,"key":"enemy_1094_ccspm","managedByScheduler":true,"preDelay":30.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":35,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1093_ccsbr","managedByScheduler":true,"preDelay":6.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":36,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":10,"hiddenGroup":null,"interval":18.0,"key":"enemy_1093_ccsbr","managedByScheduler":true,"preDelay":18.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":37,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":true,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":50.0,"key":"enemy_1097_cclmbjk","managedByScheduler":true,"preDelay":158.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":38,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":"shsdgo","interval":1.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":170.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":39,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo4","interval":1.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":170.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":40,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo4","interval":1.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":170.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":41,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo3","interval":1.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":170.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":42,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":"shsdgo2","interval":1.0,"key":"enemy_2137_shsdgo","managedByScheduler":true,"preDelay":170.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":43,"weight":0}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0},{"fragments":[{"actions":[{"actionType":"EMPTY","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":"s1","randomSpawnGroupPackKey":null,"routeIndex":44,"weight":85},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2001_duckmi","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":"s1","randomSpawnGroupPackKey":null,"routeIndex":45,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2002_bearmi","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":"s1","randomSpawnGroupPackKey":null,"routeIndex":46,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2085_skzjxd","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":"s1","randomSpawnGroupPackKey":null,"routeIndex":47,"weight":5},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2034_sythef","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":"s1","randomSpawnGroupPackKey":null,"routeIndex":48,"weight":5}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]},"rogue6/level_rogue6_b-6":{"aliases":{"trap_325_shfort#1":"trap_325_shfort","trap_325_shfort#2":"trap_325_shfort","trap_325_shfort#3":"trap_325_shfort","trap_325_shfort#4":"trap_325_shfort","trap_325_shfort#5":"trap_325_shfort","trap_325_shfort#6":"trap_325_shfort","trap_325_shruin#1":"trap_326_shruin"},"levelId":"rogue6/level_rogue6_b-6","refs":{"enemy_10084_hlegle_2":{"ov":["attributes"]},"enemy_1350_mgcshp_2":{"ov":["attributes"]},"enemy_2133_shdopl_b":{"n":"空植体(杀人兔)","ov":["name","description","prefabKey","attributes","applyWay","motion","enemyTags","lifePointReduce","levelType","rangeRadius","numOfExtraDrops","viewRadius","notCountInTotal"],"pk":"enemy_2133_shdopl"},"enemy_2133_shdopl_d":{"n":"空植体(奇美拉)","ov":["name","description","prefabKey","attributes","applyWay","motion","enemyTags","lifePointReduce","levelType","rangeRadius","numOfExtraDrops","viewRadius","notCountInTotal"],"pk":"enemy_2133_shdopl"}},"runes":[],"tokens":["trap_325_shfort","trap_325_shfort#1","trap_325_shfort#2","trap_325_shfort#3","trap_325_shfort#4","trap_325_shfort#5","trap_325_shfort#6","trap_325_shruin#1","trap_326_shruin"],"waves":[{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":true,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2150_shchmr","managedByScheduler":true,"preDelay":50.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":0,"weight":25},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":3.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":1,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":20.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":2,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":26.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":3,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":40.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":4,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":3.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":52.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":5,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":64.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":6,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":3.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":80.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":7,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2135_shkrbt","managedByScheduler":true,"preDelay":35.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":8,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2135_shkrbt","managedByScheduler":true,"preDelay":70.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":9,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2135_shkrbt","managedByScheduler":true,"preDelay":90.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":10,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1309_mhboar_2","managedByScheduler":true,"preDelay":23.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":11,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1309_mhboar_2","managedByScheduler":true,"preDelay":55.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":12,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1309_mhboar_2","managedByScheduler":true,"preDelay":80.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":13,"weight":0}],"preDelay":7.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0},{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":5,"hiddenGroup":null,"interval":6.0,"key":"enemy_10084_hlegle_2","managedByScheduler":true,"preDelay":4.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":14,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":5,"hiddenGroup":null,"interval":6.0,"key":"enemy_10084_hlegle_2","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":15,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":3,"hiddenGroup":null,"interval":3.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":33.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":16,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2135_shkrbt","managedByScheduler":true,"preDelay":42.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":17,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":3.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":45.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":18,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2135_shkrbt","managedByScheduler":true,"preDelay":51.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":19,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl_b","managedByScheduler":true,"preDelay":54.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":20,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1309_mhboar_2","managedByScheduler":true,"preDelay":13.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":21,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1309_mhboar_2","managedByScheduler":true,"preDelay":58.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":22,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1309_mhboar_2","managedByScheduler":true,"preDelay":83.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":23,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1350_mgcshp_2","managedByScheduler":true,"preDelay":25.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":24,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1350_mgcshp_2","managedByScheduler":true,"preDelay":55.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":25,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":2,"hiddenGroup":null,"interval":5.0,"key":"enemy_1350_mgcshp_2","managedByScheduler":true,"preDelay":80.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":26,"weight":0}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0},{"fragments":[{"actions":[{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":5,"hiddenGroup":null,"interval":6.0,"key":"enemy_10084_hlegle_2","managedByScheduler":true,"preDelay":4.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":27,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":5,"hiddenGroup":null,"interval":6.0,"key":"enemy_10084_hlegle_2","managedByScheduler":true,"preDelay":5.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":28,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":5,"hiddenGroup":null,"interval":6.0,"key":"enemy_10084_hlegle_2","managedByScheduler":true,"preDelay":80.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":29,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":5,"hiddenGroup":null,"interval":6.0,"key":"enemy_10084_hlegle_2","managedByScheduler":true,"preDelay":81.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":30,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10086_hltigr_2","managedByScheduler":true,"preDelay":13.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":31,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_10086_hltigr_2","managedByScheduler":true,"preDelay":30.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":32,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":4,"hiddenGroup":null,"interval":3.0,"key":"enemy_10086_hltigr_2","managedByScheduler":true,"preDelay":50.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":33,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":3,"hiddenGroup":null,"interval":12.0,"key":"enemy_10086_hltigr_2","managedByScheduler":true,"preDelay":88.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":34,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2136_shcolo","managedByScheduler":true,"preDelay":33.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":35,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2136_shcolo","managedByScheduler":true,"preDelay":53.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":36,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2136_shcolo","managedByScheduler":true,"preDelay":95.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":37,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2136_shcolo","managedByScheduler":true,"preDelay":108.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":38,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2136_shcolo","managedByScheduler":true,"preDelay":121.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":39,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":4,"hiddenGroup":null,"interval":30.0,"key":"enemy_1350_mgcshp_2","managedByScheduler":true,"preDelay":20.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":40,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":4,"hiddenGroup":null,"interval":30.0,"key":"enemy_1350_mgcshp_2","managedByScheduler":true,"preDelay":23.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":41,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1350_mgcshp_2","managedByScheduler":true,"preDelay":118.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":42,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_1350_mgcshp_2","managedByScheduler":true,"preDelay":121.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":43,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":8,"hiddenGroup":null,"interval":2.8,"key":"enemy_2135_shkrbt","managedByScheduler":true,"preDelay":6.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":44,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":8,"hiddenGroup":null,"interval":2.8,"key":"enemy_2135_shkrbt","managedByScheduler":true,"preDelay":88.0,"randomSpawnGroupKey":null,"randomSpawnGroupPackKey":null,"routeIndex":45,"weight":0},{"actionType":"SPAWN","autoDisplayEnemyInfo":false,"autoPreviewRoute":true,"count":1,"hiddenGroup":null,"interval":1.0,"key":"enemy_2133_shdopl_d","managedByScheduler":true,"preDelay":120.0,"randomSpawnGroupKey":"e1","randomSpawnGroupPackKey":null,"routeIndex":46,"weight":1},{"actionType":"EMPTY","autoDisplayEnemyInfo":false,"autoPreviewRoute":false,"count":1,"hiddenGroup":null,"interval":1.0,"key":"","managedByScheduler":true,"preDelay":120.0,"randomSpawnGroupKey":"e1","randomSpawnGroupPackKey":null,"routeIndex":47,"weight":99}],"preDelay":0.0}],"maxTimeWaitingForNextWave":-1.0,"postDelay":0.0,"preDelay":0.0}]}},"version":"3.1"};
+</script>
+<script>
+(() => {
+  const DATA = (typeof window !== "undefined" && window.WAVE_DATA) || {};
+  const SAMPLES = DATA.samples || {};
+  const $ = s => document.querySelector(s);
+  let level = null, result = null, base = null, selFrame = null, selKey = "";
+  const state = { choice: {}, hidden: {}, gates: {}, clear: {}, consts: {}, delayOverride: {} };
+
+  // ---------- 外部映射数据 ----------
+  // 映射数据与工具主体分离：默认加载同目录的 `wave-mappings.js`，
+  // 也可以在面板中导入一个或多个映射文件进行覆盖或补充。
+  const MAPS = { unitNames: {}, delayBorn: {}, levelNames: {}, trapClass: {} };
+  let mapSrc = null;
+  function useMapsFrom(m, from) {
+    if (!m) return false;
+    let hit = 0;
+    ["unitNames", "delayBorn", "levelNames", "trapClass"].forEach(k => {
+      if (m[k] && typeof m[k] === "object") { MAPS[k] = m[k]; hit++; }
+    });
+    if (!hit) return false;
+    mapSrc = from || mapSrc;
+    return true;
+  }
+  function updateMapStatus() {
+    const el = $("#mapStatus");
+    if (!el) return;
+    const c = [Object.keys(MAPS.unitNames).length, Object.keys(MAPS.delayBorn).length,
+               Object.keys(MAPS.levelNames).length, Object.keys(MAPS.trapClass).length];
+    if (!c[0] && !c[1] && !c[2] && !c[3]) {
+      el.innerHTML = '<div class="warnline">⚠ 未加载映射数据库：中文名 / delayToBorn / 关名 / 箱型标都不可用。' +
+        "导入 JSON 映射文件（可多选），或把 " +
+        "<code>wave-mappings.js</code> 放到本文件同目录后刷新。</div>";
+      return;
+    }
+    el.innerHTML = '<div class="src">单位名 ' + c[0] + " · delayToBorn " + c[1] + " · 关名 " + c[2] +
+      " · 箱型 " + c[3] + " 主题</div>" +
+      '<div class="src">来源：' + (mapSrc || "导入") + "</div>";
+  }
+  const readText = f => new Promise((res, rej) => {
+    const rd = new FileReader();
+    rd.onload = () => res(rd.result);
+    rd.onerror = () => rej(new Error("读取失败"));
+    rd.readAsText(f);
+  });
+  // 导入：按内容自动识别映射表类型，也支持本工具的合并格式。
+  async function importMaps(files) {
+    const okRows = [], bad = [];
+    for (const f of files) {
+      let obj = null;
+      try { obj = CORE.parseMappingText(await readText(f)); } catch (e) { obj = null; }
+      const kind = obj && CORE.classifyMapping(obj);
+      const maps = kind && CORE.mappingFromTable(kind, obj);
+      if (!maps) { bad.push(f.name); continue; }
+      useMapsFrom(maps, "导入 " + f.name + (files.length > 1 ? " 等 " + files.length + " 个文件" : ""),
+                  obj.generated);
+      okRows.push(f.name + " → " + Object.keys(maps).map(k => k + " " + Object.keys(maps[k]).length).join(" / "));
+    }
+    const msg = $("#mapMsg");
+    if (msg) msg.innerHTML = okRows.map(s => '<div class="src">✓ ' + s + "</div>")
+      .concat(bad.map(s => '<div class="warnline">✗ ' + s + "：认不出是哪张表</div>")).join("");
+    updateMapStatus();
+    if (okRows.length) refresh(true);
+  }
+
+  const fmtT = CORE.fmtSecond;
+  const fmtTFee = CORE.fmtSecondFee;     // 费用条坐标系：全局帧 − 1。
+  const constsOf = () => ({ exec: +state.consts.exec, handoff: +state.consts.handoff,
+                            preMs: Math.round(+state.consts.pre * 30000),
+                            itvMs: Math.round(+state.consts.itv * 30000),
+                            cnt: +state.consts.cnt });
+  const constsAreDefault = () => ["exec", "handoff", "pre", "itv", "cnt"]
+    .every(k => String(state.consts[k]) === String(DEFUI[k]));
+
+  const DEFUI = { exec: 1, handoff: 2, pre: 3, itv: 0.3, cnt: 2 };
+
+  function resetState() {
+    state.choice = CORE.defaultChoices(level);
+    state.hidden = {};
+    state.gates = {};
+    state.clear = {};
+    state.consts = Object.assign({}, DEFUI);
+    state.delayOverride = {};
+    selFrame = null; selKey = "";
+  }
+
+  // ---------- 关名：映射库 level_mapping 给的 {code, name} ----------
+  // 表里没有的关卡（或映射未加载）退回显示原始 id。
+  function labelOfKey(k) {
+    if (!k) return "";
+    const bare = String(k).replace(/\.json$/i, "").split("/").pop();
+    const v = MAPS.levelNames[bare];
+    if (!v) return "";
+    return ((v.code ? v.code + " " : "") + v.name).trim();
+  }
+  const levelLabel = () => labelOfKey(level && level.src) || labelOfKey(level && level.levelId);
+
+  // ---------- 单位 key → 中文名（解析逻辑在 core，便于无头回归） ----------
+  const baseKeyOf = k => CORE.baseKeyOf(level, k);
+  const unitName = k => CORE.unitName(level, MAPS.unitNames, k);
+  const refInfo = k => CORE.refInfo(level, k);
+  // 非别名标注：本体 key 与原名不同的才提示（便于肉眼区分变体）
+  const isVariant = k => !!k && k.indexOf("#") > 0;
+  // 关卡敌人变体标（`enemyDbRefs.overwrittenData` 有 m_defined 字段才出现）
+  function refTag(k) {
+    const r = refInfo(k);
+    if (!r) return "";
+    const t = "本关覆写：" + (r.ov || []).join(" / ") + (r.pk ? "；预制体 → " + r.pk : "");
+    return ' <span class="tag lv" title="' + t + '">关卡变体</span>';
+  }
+
+  // ---------- 归一化：接受完整关卡 JSON 或本工具的精简载荷 ----------
+  function unitsOf(d) {
+    const aliases = {}, local = {}, tokens = new Set();
+    const pre = d.predefines || {};
+    ["characterInsts", "tokenInsts", "characterCards", "tokenCards"].forEach(b => {
+      (pre[b] || []).forEach(e => {
+        const a = e.alias, k = (e.inst || {}).characterKey;
+        if (a) tokens.add(a);
+        if (k) tokens.add(k);
+        if (a && k) aliases[a] = k;
+      });
+    });
+    (d.enemies || []).forEach(e => {
+      if (e.alias) tokens.add(e.alias);
+      if (e.key) tokens.add(e.key);
+      if (e.alias && e.key) aliases[e.alias] = e.key;
+      if (e.name) {
+        if (e.key) local[e.key] = e.name;
+        if (e.alias) local[e.alias] = e.name;
+      }
+    });
+    return { aliases, local, tokens: [...tokens] };
+  }
+  // 关卡 `enemyDbRefs[].overwrittenData` → "本关覆写过的敌人变体"
+  // 两种形态：① 叶子字段带 m_defined；② 嵌套容器（如 attributes）要下钻一层看子字段
+  // 覆写信息可能位于嵌套字段中，因此需要继续检查一层子对象。
+  function ovDefined(v) {
+    if (!v || typeof v !== "object") return false;
+    if (v.m_defined) return true;
+    return Object.keys(v).some(x => v[x] && typeof v[x] === "object" && v[x].m_defined);
+  }
+  function refsOf(d) {
+    const out = {};
+    (d.enemyDbRefs || []).forEach(r => {
+      const k = r.id;
+      if (!k) return;
+      const ov = r.overwrittenData || {};
+      const defined = Object.keys(ov).filter(f => ovDefined(ov[f]));
+      if (!defined.length) return;
+      const rec = { ov: defined };
+      const nm = ov.name && ov.name.m_value;
+      if (typeof nm === "string" && nm.trim()) rec.n = nm.trim();
+      const pk = ov.prefabKey && ov.prefabKey.m_value;
+      if (typeof pk === "string" && pk.trim()) rec.pk = pk.trim();
+      out[k] = rec;
+    });
+    return out;
+  }
+  function normalize(d, key) {
+    if (d && d.waves) {
+      const u = Array.isArray(d.tokens)                     // 精简载荷总是带 tokens
+        ? { aliases: d.aliases || {}, local: d.localNames || {}, tokens: d.tokens, refs: d.refs || {} }
+        : Object.assign(unitsOf(d), { refs: refsOf(d) });   // 完整关卡 JSON：现场抽
+      return { levelId: d.levelId || d.name || "(导入)", src: key || "",
+               waves: d.waves, aliases: u.aliases, localNames: u.local,
+               tokens: u.tokens, refs: u.refs, runes: d.runes || [] };
+    }
+    return d;
+  }
+  function hintRogueTopic(lv) {
+    const pref = new Set(lv.tokens || []);
+    for (const [topic, gc] of Object.entries(MAPS.trapClass)) {
+      for (const v of Object.values(gc)) {
+        const arr = Array.isArray(v) ? v : [v];
+        for (const id of arr) if (id && pref.has(id)) return topic;
+      }
+    }
+    return null;
+  }
+  function trapTagOf(lv, key) {
+    if (!key) return "";
+    const topic = hintRogueTopic(lv); if (!topic) return "";
+    const gc = MAPS.trapClass[topic]; if (!gc) return "";
+    const b = key.split("#")[0];
+    if (gc.goldChestTrapId === b) return '<span class="tag gold">金箱·受 goldTrapCnt 抽取</span>';
+    if ((gc.mimicEnemyIds || []).includes(b)) return '<span class="tag mimic">模仿敌·受 mimicEnemyCnt 抽取</span>';
+    if ([gc.normBoxTrapId, gc.rareBoxTrapId, gc.badBoxTrapId, gc.toolBoxTrapId, gc.specialTrapId].includes(b))
+      return '<span class="tag" style="background:#2b3040;color:#9fb3d1">箱</span>';
+    return "";
+  }
+
+  function run() {
+    const args = { randomChoice: state.choice, hiddenEnabled: state.hidden, gates: state.gates,
+                   clearFrames: state.clear, delayMap: MAPS.delayBorn,
+                   delayOverride: state.delayOverride, const: constsOf() };
+    result = CORE.compute(level, args);
+    base = constsAreDefault() ? result
+      : CORE.compute(level, Object.assign({}, args, { const: {} }));
+  }
+
+  // ---------- 时间轴泳道定义（左侧标注 = 动作类型；高度按事件量级区分） ----------
+  // 顺序即从上到下的显示顺序；只有"本关真的有这种条目"的泳道才会出现。
+  const LANES = [
+    { t: "SPAWN", label: "SPAWN 出怪", color: "#66bb6a", h: 16 },
+    { t: "ACTIVATE_PREDEFINED", label: "ACTIVATE_PREDEFINED", color: "#ffb74d", h: 13 },
+    { t: "EMPTY", label: "EMPTY 占位", color: "#6b7280", h: 10 },
+    { t: "PREVIEW_CURSOR", label: "PREVIEW_CURSOR（含合成）", color: "#b39ddb", h: 10 },
+    { t: "DISPLAY_ENEMY_INFO", label: "DISPLAY_ENEMY_INFO", color: "#80cbc4", h: 10 },
+    { t: "OTHER", label: "其它动作（STORY / 无事件类型）", color: "#90a4ae", h: 10 },
+  ];
+  const HEAD_H = 16, PITCH = 20, AXIS_H = 20;
+  const laneKeyOf = e => LANES.some(l => l.t === e.kind) ? e.kind : "OTHER";
+  const FRAME_STEPS = [30, 60, 150, 300, 600, 900, 1500, 3000, 6000, 15000];
+
+  // 统一刷新：先算（run）再画。rebuildPanel=true 会重建左侧面板 —— 会丢输入焦点，
+  // 所以只在"选择/勾选/按钮"这类操作时用；数字输入框的 input 事件走 rebuildPanel=false。
+  function refresh(rebuildPanel) {
+    if (!level) return;
+    run();
+    if (rebuildPanel) renderPanel();
+    render();
+  }
+
+  // ---------- 渲染 ----------
+  function render() {
+    if (!level || !result) return;
+    const bd = !constsAreDefault();
+
+    const lb = levelLabel();
+    $("#totalInfo").textContent = (lb ? lb + " · " : "") + level.levelId + " · 总帧 " +
+      result.totalFrames + " (" + fmtT(result.totalFrames) + ")" + (bd ? " · 常数已偏离基准" : "");
+
+    // 波次门行：起点与 G 随重算刷新（面板不重建，在这里就地更新文本）
+    const gt = $("#gates");
+    if (gt) result.waves.forEach(w => {
+      const a = gt.querySelector('[data-gstart="' + w.index + '"]');
+      if (a) a.textContent = "起点 " + w.gateStart;
+      const b = gt.querySelector('[data-gout="' + w.index + '"]');
+      if (b) b.textContent = "G=" + w.gate + "f" +
+        (w.clearFrame != null && w.clearFrame < w.gateStart ? "（清场早于门起点）" : "");
+    });
+
+    // ---------- 时间轴：左侧类型标注 + 帧号横轴 ----------
+    const px = parseFloat($("#zoom").value);
+    const lanes = LANES.filter(l => result.events.some(e => laneKeyOf(e) === l.t));
+    const bodyH = HEAD_H + Math.max(lanes.length, 1) * PITCH;
+    const laneTop = new Map();
+    lanes.forEach((l, i) => laneTop.set(l.t, HEAD_H + i * PITCH + (PITCH - l.h) / 2));
+    const avail = Math.max(($("#tlWrap").clientWidth || 900) - 124, 320);
+    const W = Math.max(avail, result.totalFrames * px + 60);
+
+    const g = $("#tlGutter");
+    g.innerHTML = '<div class="gh"></div>';
+    lanes.forEach(l => {
+      const d = document.createElement("div");
+      d.className = "glane";
+      d.style.height = PITCH + "px";
+      d.title = l.label;
+      d.innerHTML = '<i style="background:' + l.color + '"></i>' + l.label;
+      g.appendChild(d);
+    });
+    const gl = document.createElement("div");
+    gl.className = "glane";
+    gl.style.height = AXIS_H + "px";
+    gl.style.color = "var(--tx)";
+    gl.textContent = "帧号 →";
+    g.appendChild(gl);
+
+    const tl = $("#tlPlot");
+    tl.style.width = W + "px";
+    tl.style.height = (bodyH + AXIS_H) + "px";
+    tl.innerHTML = "";
+
+    // 波次带
+    result.waves.forEach(w => {
+      const band = document.createElement("div");
+      band.className = "waveBand";
+      band.style.left = (w.start * px) + "px";
+      band.style.width = ((w.end - w.start) * px) + "px";
+      band.style.height = bodyH + "px";
+      band.innerHTML = '<span class="wl">wave' + w.index + " · 门 " + w.gate + "f" +
+        (w.gateMode === "timeout" ? " (≤" + w.gateMax + ")" : "") + "</span>";
+      tl.appendChild(band);
+    });
+
+    // 泳道分隔线 + 帧刻度（竖线贯穿泳道区，标签落在底部横轴上）
+    lanes.forEach((l, i) => {
+      const d = document.createElement("div");
+      d.className = "gline";
+      d.style.top = (HEAD_H + i * PITCH) + "px";
+      tl.appendChild(d);
+    });
+    const step = FRAME_STEPS.find(s => s * px >= 56) || FRAME_STEPS[FRAME_STEPS.length - 1];
+    const showSec = step * px >= 96;
+    for (let f = 0; f <= result.totalFrames; f += step) {
+      const v = document.createElement("div");
+      v.className = "vline";
+      v.style.left = (f * px) + "px";
+      v.style.height = bodyH + "px";
+      tl.appendChild(v);
+      const t = document.createElement("div");
+      t.className = "tick";
+      t.style.left = (f * px) + "px";
+      t.style.top = bodyH + "px";
+      t.style.height = AXIS_H + "px";
+      t.textContent = f + "f" + (showSec ? " (" + (f / 30) + "s)" : "");
+      tl.appendChild(t);
+    }
+
+    // 事件条（泳道由类型决定，不再靠固定 top）
+    result.events.forEach(e => {
+      const lk = laneKeyOf(e);
+      const l = lanes.find(x => x.t === lk);
+      if (!l) return;
+      const d = document.createElement("div");
+      d.className = "ev" + (e.frame === selFrame && e.key === selKey ? " sel" : "");
+      d.style.left = (e.frame * px) + "px";
+      d.style.top = laneTop.get(lk) + "px";
+      d.style.width = Math.max(2, px * 1.2) + "px";
+      d.style.height = l.h + "px";
+      d.style.background = l.color;
+      const un = unitName(e.key);
+      const info = e.frame + "f · " + fmtT(e.frame) + " · w" + e.wave + "f" + e.frag + "a" + e.act +
+        "#" + e.seq + " " + e.kind + " " + (e.key || "") + (un ? " " + un : "") +
+        (e.hg ? " · 隐 " + e.hg : "") + (e.rg ? " · 随 " + e.rg : "");
+      d.title = info;                                  // 桌面端：悬浮提示
+      d.addEventListener("click", () => {
+        selFrame = e.frame; selKey = e.key;
+        const ei = $("#evInfo");                       // 移动端没有 title ⇒ 同一串信息落到详情条
+        if (ei) ei.textContent = info;
+        render();
+      });
+      tl.appendChild(d);
+    });
+
+    const qs = e => e.frame + "|" + e.wave + "|" + e.frag + "|" + e.act + "|" + e.seq;
+    const baseQ = new Map(base.events.map(e => [qs(e), e.frame]));
+    // 归属标注（隐藏组 / 随机组）—— 不必勾选就能看出该条目属于哪一组
+    const gcellOf = (hg, rg) => "<td>" +
+      (hg ? '<span class="tag hg">隐 ' + hg + "</span>" : "") +
+      (rg ? '<span class="tag rg">随 ' + rg + "</span>" : "") +
+      (!hg && !rg ? '<span class="dt">—</span>' : "") + "</td>";
+
+    // 逐条目账
+    $("#thQdt").style.display = bd ? "" : "none";
+    const tb = $("#tbody"); tb.innerHTML = "";
+    result.events.slice().sort((a, b) => a.frame - b.frame || (a.wave - b.wave) || (a.frag - b.frag)).forEach((e, n) => {
+      const tr = document.createElement("tr");
+      tr.className = (e.frame === selFrame && e.key === selKey) ? "hl" : "";
+      const bf = baseQ.get(qs(e));
+      const dcell = bd ? '<td class="mono dt">' + (bf == null ? "—" : (e.frame - bf >= 0 ? "+" : "") + (e.frame - bf)) + "</td>" : "";
+      const un = unitName(e.key);
+      tr.innerHTML = "<td>" + (n + 1) + '</td><td class="mono">' + e.frame + '</td><td class="mono">' + fmtT(e.frame) +
+        '</td><td class="mono">' + fmtTFee(e.frame) +
+        '</td><td class="mono">w' + e.wave + ".f" + e.frag + ".a" + e.act + "#" + e.seq + "</td><td>" + e.kind +
+        "</td><td>" + (e.key || "—") + (un ? ' <span class="dt">' + un + "</span>" : "") +
+        (isVariant(e.key) ? ' <span class="tag var" title="本关专属别名 → ' + baseKeyOf(e.key) + '">别名</span>' : "") + refTag(e.key) +
+        '</td><td class="mono">' + (e.t / 30000).toFixed(2) + "</td><td>" + (e.route == null ? "—" : e.route) +
+        "</td><td>" + (e.syn ? "合成" : (e.kind === "SPAWN" ? "出生" : "执行")) + "</td>" + dcell +
+        gcellOf(e.hg, e.rg);
+      tb.appendChild(tr);
+    });
+    if (result.removedRows.length) {
+      const tr = document.createElement("tr"); tr.className = "cat";
+      tr.innerHTML = '<td colspan="' + (bd ? 12 : 11) + '">未入队条目（预处理/过滤删除）× ' +
+        result.removedRows.length + "</td>";
+      tb.appendChild(tr);
+    }
+    result.removedRows.forEach(r => {
+      const tr = document.createElement("tr"); tr.className = "removed";
+      tr.innerHTML = '<td>—</td><td class="mono">—</td><td>—</td><td>—</td><td class="mono">w' + r.wave + ".f" + r.frag +
+        ".a" + r.act + "</td><td>" + r.type + "</td><td>" + (r.key || "—") +
+        (unitName(r.key) ? ' <span class="dt">' + unitName(r.key) + "</span>" : "") +
+        '</td><td class="mono">—</td><td>—</td><td class="reason">' + r.reason + "</td>" +
+        (bd ? "<td>—</td>" : "") + gcellOf(r.hg, r.rg);
+      tb.appendChild(tr);
+    });
+
+    // 出怪时刻表（D3）
+    $("#thSdt").style.display = bd ? "" : "none";
+    const stb = $("#tbodyS"); stb.innerHTML = "";
+    const sBase = new Map(base.spawnTable.map(r => [r.wave + "|" + r.frag + "|" + r.act + "|" + r.seq, r.frame]));
+    result.spawnTable.forEach(r => {
+      const bf = sBase.get(r.wave + "|" + r.frag + "|" + r.act + "|" + r.seq);
+      const tr = document.createElement("tr");
+      tr.className = (r.frame === selFrame && r.key === selKey ? "hl " : "") + (r.tie ? "tie" : "");
+      const dcell = bd ? '<td class="mono dt">' + (bf == null ? "—" : (r.frame - bf >= 0 ? "+" : "") + (r.frame - bf)) + "</td>" : "";
+      tr.innerHTML = "<td>" + r.n + "</td><td>" + (r.key || "—") +
+        (unitName(r.key) ? ' <span class="dt">' + unitName(r.key) + "</span>" : "") + refTag(r.key) +
+        '</td><td>' + (r.route == null ? "—" : r.route) +
+        '</td><td class="mono">w' + r.wave + ".f" + r.frag + ".a" + r.act + "#" + r.seq +
+        '</td><td class="mono">' + r.frame + '</td><td class="mono">' + fmtT(r.frame) +
+        '</td><td class="mono">' + fmtTFee(r.frame) +
+        '</td><td class="mono">' + (r.delta >= 0 ? "+" : "") + r.delta +
+        '</td><td class="tcell">' + (r.tie ? "⚠ 同刻" : "") + "</td>" + dcell;
+      stb.appendChild(tr);
+    });
+    renderMarkdown();
+  }
+
+  function renderMarkdown() {
+    const rows = result.spawnTable.map(r =>
+      "| " + r.n + " | " + (r.key || "") + (unitName(r.key) ? " " + unitName(r.key) : "") + " | " + (r.route == null ? "" : r.route) +
+      " | w" + r.wave + ".f" + r.frag + ".a" + r.act + "#" + r.seq + " | " + r.frame + " | " + fmtT(r.frame) +
+      " | " + fmtTFee(r.frame) +
+      " | " + (r.delta >= 0 ? "+" : "") + r.delta + " | " + (r.tie ? "⚠" : "") + " |");
+    $("#mdOut").value = ["| # | 敌人 | 路线 | 波次.兵团.小队 | 帧 | 秒:帧 | 费用条 | Δ | 同刻 |",
+      "|---|---|---|---|---|---|---|---|---|", ...rows].join("\n");
+  }
+
+  // ---------- 控制面板 ----------
+  function renderPanel() {
+    if (!level) return;
+    // 随机组：候选是「一个随机包」或（无包键的）单条条目
+    const rg = $("#randGroups"); rg.innerHTML = "";
+    const gs = CORE.groupsOfLevel(level);
+    if (!gs.length) rg.innerHTML = '<div class="src">本关无随机组</div>';
+    gs.forEach(g => {
+      const box = document.createElement("div"); box.className = "grp";
+      const total = g.buckets.reduce((s, b) => s + b.weight, 0);
+      const multi = g.buckets.some(b => b.packKey);
+      const opts = g.buckets.map(b => {
+        const first = g.actions[b.members[0]] || {};
+        const emp = CORE.isEmptyBucket(g.actions, b);
+        const head = b.packKey ? "包 " + b.packKey : (emp ? "(empty)" : (first.actionType || "条目"));
+        const tail = [b.packKey ? b.members.length + " 条" : "", "w" + b.weight,
+                      emp ? "不出" : (first.key || "")].filter(Boolean).join(" · ");
+        return '<option value="' + b.members[0] + '"' +
+          (state.choice[g.key] === b.members[0] ? " selected" : "") + ">" +
+          head + "  " + tail + (b.packKey ? "" : trapTagOf(level, first.key || "")) + "</option>";
+      }).join("");
+      box.innerHTML = '<div class="gname">' + g.key + (multi ? "（" + g.buckets.length + " 个包）" : "") +
+        '</div><select data-gk="' + g.key + '">' + opts + "</select>" +
+        '<div class="meta">权重和 ' + total +
+        (multi ? " · 抽中一个包 ⇒ 整包出怪" : " · 抽中一条 ⇒ 只出这条") +
+        " · 同名键在不同片段是不同组</div>";
+      rg.appendChild(box);
+    });
+    rg.querySelectorAll("select").forEach(sel => sel.addEventListener("change", () => {
+      state.choice[sel.dataset.gk] = parseInt(sel.value, 10); refresh(false);
+    }));
+
+    // 隐藏组
+    const hg = $("#hiddenGroups"); hg.innerHTML = "";
+    const hgs = new Set();
+    (level.waves || []).forEach(w => (w.fragments || []).forEach(f => (f.actions || []).forEach(a => {
+      if (a.hiddenGroup) hgs.add(a.hiddenGroup);
+    })));
+    if (!hgs.size) hg.innerHTML = '<div class="src">本关无隐藏组</div>';
+    [...hgs].sort().forEach(g => {
+      const row = document.createElement("label"); row.className = "hg";
+      row.innerHTML = '<input type="checkbox" data-g="' + g + '"' + (state.hidden[g] ? " checked" : "") +
+        "><span>" + g + "</span>";
+      hg.appendChild(row);
+    });
+    hg.querySelectorAll("input").forEach(cb => cb.addEventListener("change", () => {
+      state.hidden[cb.dataset.g] = cb.checked; refresh(false);
+    }));
+
+    // 波次门：填「清场时刻」（绝对），G = max(1, 清场帧 − 门起点帧)
+    const gt = $("#gates"); gt.innerHTML = "";
+    result.waves.forEach(w => {
+      const row = document.createElement("div"); row.className = "gateRow";
+      const lim = w.gateMode === "timeout" ? "上限 " + w.gateMax + "f" : "无限等";
+      const cf = state.clear[w.index];
+      row.innerHTML = '<span class="gname">wave' + w.index + "</span>" +
+        '<span class="gs" data-gstart="' + w.index + '">起点 —</span>清场' +
+        '<input type="number" step="0.1" min="0" data-cs="' + w.index + '" placeholder="s" value="' +
+        (cf != null ? CORE.frameToSec(cf) : "") + '"><span class="src">s</span>=' +
+        '<input type="number" step="1" min="0" data-cf="' + w.index + '" placeholder="f" value="' +
+        (cf != null ? cf : "") + '"><span class="src">帧</span>' +
+        '<span class="gs" data-gout="' + w.index + '">—</span>' +
+        '<span class="src">managed ' + w.managed + " · " + lim + "</span>";
+      gt.appendChild(row);
+    });
+    // 两个输入框同步：秒 <-> 帧（帧是规范值；秒只是它的换算显示）
+    gt.querySelectorAll("input[data-cs]").forEach(inpS => inpS.addEventListener("input", () => {
+      const wi = +inpS.dataset.cs, v = inpS.value.trim();
+      const inpF = gt.querySelector('input[data-cf="' + wi + '"]');
+      if (v === "" || isNaN(parseFloat(v))) { delete state.clear[wi]; if (inpF) inpF.value = ""; }
+      else {
+        const fr = CORE.secToFrame(parseFloat(v));
+        state.clear[wi] = fr; if (inpF) inpF.value = fr;
+      }
+      refresh(false);
+    }));
+    gt.querySelectorAll("input[data-cf]").forEach(inpF => inpF.addEventListener("input", () => {
+      const wi = +inpF.dataset.cf, v = inpF.value.trim();
+      const inpS = gt.querySelector('input[data-cs="' + wi + '"]');
+      if (v === "" || isNaN(parseInt(v, 10))) { delete state.clear[wi]; if (inpS) inpS.value = ""; }
+      else {
+        const fr = Math.max(0, parseInt(v, 10));
+        state.clear[wi] = fr; if (inpS) inpS.value = CORE.frameToSec(fr);
+      }
+      refresh(false);
+    }));
+
+    // 常数
+    const ct = $("#consts"); ct.innerHTML = "";
+    [["exec", "EXECUTOR_FRAMES", 0, 2, 1], ["handoff", "FRAG_HANDOFF", 0, 4, 1],
+     ["pre", "预览提前量(s)", 0, 10, 0.5], ["itv", "预览间隔(s)", 0, 2, 0.1], ["cnt", "预览条数", 0, 4, 1]]
+      .forEach(([k, lab, mn, mx, st]) => {
+        const row = document.createElement("div"); row.className = "cRow";
+        row.innerHTML = "<label>" + lab + '</label><input type="number" data-c="' + k + '" min="' + mn +
+          '" max="' + mx + '" step="' + st + '" value="' + state.consts[k] + '">';
+        ct.appendChild(row);
+      });
+    ct.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => {
+      state.consts[inp.dataset.c] = inp.value; refresh(false);
+    }));
+
+    // delayToBorn 覆盖
+    const dl = $("#delays"); dl.innerHTML = "";
+    if (!result.enemies.length) dl.innerHTML = '<div class="src">本关无 SPAWN 条目</div>';
+    result.enemies.forEach(e => {
+      const row = document.createElement("div"); row.className = "eRow";
+      row.innerHTML = '<span class="k" title="' + e.key + '">' + e.key + ' <span class="src">' +
+        e.delay + " · " + e.src + '</span></span><input type="number" step="0.1" min="0" data-ek="' +
+        e.key + '" placeholder="' + e.delay + '" value="' +
+        (state.delayOverride[e.key] != null ? state.delayOverride[e.key] : "") + '">';
+      dl.appendChild(row);
+    });
+    dl.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => {
+      if (inp.value === "") delete state.delayOverride[inp.dataset.ek];
+      else state.delayOverride[inp.dataset.ek] = inp.value;
+      refresh(false);
+    }));
+  }
+
+  function loadLevel(d, key) {
+    level = normalize(d, key);
+    resetState();
+    refresh(true);
+  }
+
+  // ---------- 事件绑定 ----------
+  // 映射数据：先加载同目录的 wave-mappings.js，面板导入的数据可覆盖同名表。
+  if (window.WAVE_MAPPINGS) useMapsFrom(window.WAVE_MAPPINGS, "wave-mappings.js（同目录自动加载）");
+  updateMapStatus();
+  $("#mapIn").addEventListener("change", ev => {
+    const fs = [...(ev.target.files || [])];
+    if (fs.length) importMaps(fs);
+    ev.target.value = "";
+  });
+  $("#mapClear").addEventListener("click", () => {
+    MAPS.unitNames = {}; MAPS.delayBorn = {}; MAPS.levelNames = {}; MAPS.trapClass = {};
+    mapSrc = null; mapStamp = null;
+    const msg = $("#mapMsg"); if (msg) msg.innerHTML = "";
+    updateMapStatus();
+    refresh(true);
+  });
+  // 拖放：一次可混拖「映射文件」与「关卡 JSON」，按内容分流
+  document.addEventListener("dragover", e => e.preventDefault());
+  document.addEventListener("drop", async e => {
+    e.preventDefault();
+    const fs = [...((e.dataTransfer && e.dataTransfer.files) || [])];
+    const maps = [], levels = [];
+    for (const f of fs) {
+      let obj = null;
+      try { obj = CORE.parseMappingText(await readText(f)); } catch (err) { obj = null; }
+      if (!obj) continue;
+      if (obj.waves) levels.push([f, obj]);
+      else if (CORE.classifyMapping(obj)) maps.push(f);
+    }
+    if (maps.length) await importMaps(maps);
+    if (levels.length) { const last = levels[levels.length - 1]; loadLevel(last[1], last[0].name); }
+    if (!maps.length && !levels.length) alert("拖入的文件既不是关卡 JSON，也认不出是映射表");
+  });
+
+  const sel = $("#sampleSel");
+  Object.entries(SAMPLES).forEach(([k, v]) => {
+    const o = document.createElement("option"); o.value = k;
+    o.textContent = labelOfKey(k) || v.levelId; sel.appendChild(o);
+  });
+  sel.addEventListener("change", () => loadLevel(SAMPLES[sel.value], sel.value));
+  $("#fileIn").addEventListener("change", ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { try { loadLevel(JSON.parse(rd.result), f.name); } catch (e) { alert("JSON 解析失败: " + e); } };
+    rd.readAsText(f);
+  });
+  $("#zoom").addEventListener("input", render);
+  $("#randAll").addEventListener("click", () => {
+    CORE.groupsOfLevel(level).forEach(g => {
+      let r = Math.random() * g.buckets.reduce((s, b) => s + b.weight, 0);
+      let picked = g.buckets[g.buckets.length - 1];        // 权重全 0 的兜底
+      for (const b of g.buckets) { r -= b.weight; if (r < 0) { picked = b; break; } }
+      state.choice[g.key] = picked.members[0];
+    });
+    refresh(true);
+  });
+  $("#emptyAll").addEventListener("click", () => {
+    state.choice = CORE.defaultChoices(level); refresh(true);
+  });
+  $("#hgFromRunes").addEventListener("click", () => {
+    const en = CORE.groupsFromRunes(level);
+    state.hidden = {};
+    en.forEach(g => { state.hidden[g] = true; });
+    refresh(true);
+  });
+  $("#constReset").addEventListener("click", () => {
+    state.consts = Object.assign({}, DEFUI); refresh(true);
+  });
+  $("#tabQ").addEventListener("click", () => {
+    $("#paneQ").style.display = ""; $("#paneS").style.display = "none";
+    $("#tabQ").classList.add("on"); $("#tabS").classList.remove("on");
+  });
+  $("#tabS").addEventListener("click", () => {
+    $("#paneQ").style.display = "none"; $("#paneS").style.display = "";
+    $("#tabS").classList.add("on"); $("#tabQ").classList.remove("on");
+  });
+  $("#mdBtn").addEventListener("click", () => {
+    const box = $("#mdBox");
+    box.style.display = box.style.display === "none" ? "" : "none";
+    const ta = $("#mdOut"); ta.focus(); ta.select();
+  });
+
+  const panelEl = $("#panel");
+  $("#panelBtn").addEventListener("click", () => { panelEl.classList.toggle("folded"); });
+  // 窄屏默认收起参数面板：先让主内容（时间轴 / 两张表）占满可视区，要调参数再点「参数」展开
+  if (window.matchMedia && window.matchMedia("(max-width:860px)").matches) panelEl.classList.add("folded");
+
+  if (Object.keys(SAMPLES).length) {
+    const first = Object.keys(SAMPLES)[0];
+    sel.value = first; loadLevel(SAMPLES[first], first);
+  }
+})();
+</script>
+</body>
+</html>

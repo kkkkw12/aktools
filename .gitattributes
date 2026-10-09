@@ -1,0 +1,15 @@
+# 手写文件统一 LF
+* text=auto eol=lf
+
+# ── 站点内容是「生成的成品」，必须逐字节稳定 ──
+# 本地发布脚本靠逐字节比对判断产物有没有变，所以**不要**做换行符归一化。
+# 另外两个工具的换行符口径本来就不同、且各自沿用其历史（改了会让内部版与分发版 diff 全是噪声）：
+#   · unbalance/index.html —— CRLF（失衡工具历来如此，生成脚本也是 CRLF 全程保留）
+#   · wave/*               —— LF
+# 放在 `*` 之后：gitattributes 是同属性「后者覆盖前者」。
+unbalance/index.html  -text
+wave/index.html       -text
+wave/wave-mappings.js -text
+
+*.png binary
+*.ico binary

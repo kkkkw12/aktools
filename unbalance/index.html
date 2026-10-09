@@ -1,0 +1,2291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>失衡位移逐帧模拟器</title>
+<style>
+:root{
+  --bg:#ffffff; --bg2:#f7f7f5; --bd:#e2e0da; --bd2:#c9c6bd;
+  --tx:#2c2c2a; --tx2:#5f5e5a; --tx3:#8a887f;
+  --ok:#3b6d11; --okbg:#eaf3de; --warn:#854f0b; --warnbg:#faeeda;
+  --info:#185fa5; --infobg:#e6f1fb; --bad:#a32d2d; --badbg:#fcebeb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg2);color:var(--tx);
+  font:13px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+header{background:var(--bg);border-bottom:1px solid var(--bd);padding:12px 18px;
+  display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header h1{font-size:15px;font-weight:500;margin:0}
+header .sub{font-size:12px;color:var(--tx2)}
+.legend{font-size:11px;color:var(--tx3);margin-left:auto}
+.legend b{font-weight:500}
+.wrap{max-width:1500px;margin:0 auto;padding:14px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start}
+/* ★ minmax(0,1fr)：1fr = minmax(auto,1fr)，自动最小尺寸会被 evtbl/frtbl 的 nowrap 宽表顶开
+   ⇒ 窄屏整页横向溢出、连 .svgfit 的 width:100% 都失效。0 最小尺寸才能真收缩。 */
+@media(max-width:1000px){.grid2{grid-template-columns:minmax(0,1fr)} .grid2>div{min-width:0}}
+.card{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+.card h2{font-size:13px;font-weight:500;margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+label{font-size:12px;color:var(--tx2);min-width:74px}
+input,select{font:12px inherit;padding:3px 6px;border:1px solid var(--bd2);border-radius:5px;background:var(--bg);color:var(--tx)}
+input[type=number]{width:64px}
+input:disabled{background:var(--bg2);color:var(--tx3);border-color:var(--bd)}
+button{font:12px inherit;padding:4px 10px;border:1px solid var(--bd2);border-radius:6px;background:var(--bg);color:var(--tx);cursor:pointer}
+button:hover{border-color:var(--info);color:var(--info)}
+button.on{background:var(--infobg);border-color:var(--info);color:var(--info)}
+button:disabled{opacity:.45;cursor:not-allowed;border-color:var(--bd)}
+button:disabled:hover{border-color:var(--bd);color:var(--tx)}
+button.primary{background:var(--infobg);border-color:var(--info);color:var(--info)}
+.presets button{margin:0 4px 4px 0}
+.hint{font-size:11px;color:var(--tx3)}
+.warnbox{border:1px dashed var(--warn);background:var(--warnbg);border-radius:6px;padding:6px 9px;font-size:11px;color:var(--warn);margin-top:8px}
+.okbox{border:1px solid var(--bd);background:var(--okbg);border-radius:6px;padding:6px 9px;font-size:11px;color:var(--ok)}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border-bottom:1px solid var(--bd);padding:4px 6px;text-align:right;white-space:nowrap}
+th{color:var(--tx2);font-weight:500;text-align:right;background:var(--bg2)}
+td.l,th.l{text-align:left}
+.mono{font-family:ui-monospace,Consolas,monospace}
+.tag{display:inline-block;padding:0 5px;border-radius:4px;font-size:11px}
+.tag.reg{background:var(--bg2);color:var(--tx2)}
+.tag.toi{background:var(--infobg);color:var(--info)}
+.tag.ccd{background:var(--warnbg);color:var(--warn)}
+.tag.free{color:var(--tx3)}
+.g{color:var(--ok)} .y{color:var(--warn)} .r{color:var(--bad)}
+details{margin-top:6px}
+summary{cursor:pointer;font-size:12px;color:var(--info)}
+.steps{font-size:11px;background:var(--bg2);border-radius:6px;padding:8px 10px;margin:4px 0}
+.steps div{padding:1px 0}
+.tsub{margin:3px 0 6px 12px;padding:4px 8px;border-left:2px solid var(--bd2)}
+.titer{font-weight:500;color:var(--tx2);margin:4px 0 1px}
+.trow{font-family:ui-monospace,Consolas,monospace;color:var(--tx)}
+.wtag{display:inline-block;background:var(--infobg);color:var(--info);border-radius:3px;padding:0 4px;margin-right:4px}
+.tdir{color:var(--warn)}
+.tdtl{margin:2px 0 0}
+.tdtl summary{font-size:11px;color:var(--tx3)}
+#map{border:1px solid var(--bd);border-radius:8px;background:var(--bg);display:block}
+textarea{width:100%;height:90px;font:11px ui-monospace,Consolas,monospace;border:1px solid var(--bd2);border-radius:6px;padding:6px;background:var(--bg);color:var(--tx)}
+.selftest td.pass{background:var(--okbg)} .selftest td.fail{background:var(--badbg)}
+.pane{display:none}.pane.on{display:block}
+table.evtbl{font-size:12px}
+table.evtbl th,table.evtbl td{padding:3px 5px;vertical-align:middle}
+table.evtbl tr.sel{background:var(--infobg)}
+table.evtbl input,table.evtbl select{font-size:12px;padding:2px 4px}
+table.evtbl td select{padding:2px 3px}
+.modtag{display:inline-block;background:var(--bg2);border:1px solid var(--bd);border-radius:4px;
+  padding:0 6px;font-size:11px;color:var(--tx2);margin-right:6px}
+
+/* ── 移动端适配（容器宽度 < 860px 生效；桌面端不受影响）──
+   ① 两张 SVG（#map 地图 / #track 轨迹）加 class=svgfit：按 viewBox 等比缩放铺满列宽。
+      #map 是唯一有点击交互的 SVG，它的坐标换算已改为 getScreenCTM ⇒ 与显示尺寸解耦，缩放后落点仍准。
+   ② 触控尺寸：按钮 / 输入框抬到 ≥36px 高，避免手指点不中。
+   ③ 字号：一般输入框取 16px —— iOS Safari 在 font-size<16px 的输入框聚焦时会自动放大整页。
+      例外：事件表（evtbl）是密集型编辑面，列太多，取 14px 优先保住一屏信息量，
+      代价是 iOS 上聚焦那些小格会触发自动缩放（有意取舍，非遗漏）。 */
+.svgfit{display:block;width:100%;max-width:546px;height:auto}
+#map{touch-action:manipulation}
+#selfbox{overflow-x:auto}
+@media (max-width:860px){
+  .wrap{padding:8px 10px}
+  .grid2{gap:10px}
+  header{padding:10px 12px;gap:8px}
+  header h1{font-size:15px}
+  header .sub{font-size:12px}
+  .legend{font-size:11px;margin-left:0;width:100%}
+  .card{padding:10px 12px;margin-bottom:10px}
+  .card h2{font-size:13px}
+  body{font-size:14px}
+  .row{gap:6px}
+  label{font-size:13px;min-width:64px}
+  input,select{font-size:16px;padding:6px 8px;min-height:36px}
+  input[type=number]{width:80px}
+  button{font-size:14px;padding:8px 14px;min-height:36px}
+  table{font-size:13px}
+  th,td{padding:5px 7px}
+  table.evtbl input,table.evtbl select{font-size:14px;padding:4px 5px;min-height:32px}
+  textarea{font-size:14px;height:110px}
+  .hint{font-size:12px}
+  .warnbox,.okbox{font-size:12px}
+  .steps{font-size:12px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>失衡位移逐帧模拟器</h1>
+  <span class="sub">复现游戏物理步 · 与实测逐帧对照</span>
+  <span class="legend"><b>✅</b> 机制级 &nbsp; <b>★</b> 实测定标 &nbsp; <b>▶</b> 直接读出 &nbsp; <b>⚠</b> 推断未验证（虚线框）</span>
+</header>
+
+<div class="wrap">
+<div class="grid2">
+  <div>
+
+    <div class="card">
+      <h2><span class="modtag">①</span>地形编辑 <span class="hint" style="font-weight:400">— 点击格子切换 墙 / 空地</span></h2>
+      <svg id="map" class="svgfit" viewBox="0 0 546 378" width="546" height="378"></svg>
+      <div class="row" style="margin-top:8px">
+        <span class="hint">预设场景：</span>
+        <span class="presets" id="presets"></span>
+      </div>
+      <div class="row">
+        <span class="hint">点地图放置：</span>
+        <button id="putEnemy" class="on">敌人起点</button>
+        <button id="putEff">效果源</button>
+        <button id="putForce">力起点(力源)</button>
+        <span class="hint" id="putHint"></span>
+      </div>
+      <div class="hint">
+        <b>两种「源」是不同的点</b>（<span class="mono">origin = source.mapPosition + dirOffset</span>）：<br>
+        · <b style="color:#993c1d">效果源</b>（菱形）= 施加拉力的<b>干员位置</b> —— 拉力用它判<b>急停判据 B（急停半径 0.6708）</b>；推力用它判<b>溅射降级</b>；<br>
+        · <b style="color:#0c447c">力起点 / 力源</b>（方框）= 拉拽原点 <span class="mono">origin</span> —— 力的<b>方向</b>参照（拉力指向它、推力「由力源计算」时推离它），也是拉力衰减分子 <span class="mono">d</span> 的参照；★ 拉力另用它判<b>急停判据 A（到点容差 ≤ 0.05）</b>（填拉力时请让它 = <b>拉拽终点</b>）<br>
+        箭头 = 各事件的<b>力方向</b>（带 #n 编号，对应下方事件序列）；选中行的箭头加粗。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="modtag">③</span>失衡事件序列 <span class="hint" style="font-weight:400">— 每行一个施力事件；同一序列可含多个力，各自按自身管道择帧生效</span></h2>
+      <div class="row">
+        <button class="primary" id="addProj">＋ 弹道推力</button>
+        <button id="addDirect">＋ 非弹道推力</button>
+        <button id="addPull">＋ 拉力</button>
+        <span class="hint" id="evHint"></span>
+      </div>
+      <div style="overflow:auto"><table id="evtbl" class="evtbl"></table></div>
+      <div class="hint" style="margin-top:8px">
+        <b>「命中帧」之后第几帧才有位移 —— 由类型决定</b>（三者管道不同，同一帧可并存）：<br>
+        · <b>弹道推力</b> = 命中帧的 <span class="mono">OnTick</span> 之后施冲量 ⇒ <b>同帧</b>位移<br>
+        · <b>非弹道推力</b> = 命中帧的<b>物理步之后</b>施冲量 ⇒ <b>次帧</b>位移，且该帧先经一次线性摩擦<br>
+        · <b>拉力</b> = 命中帧+1 帧的协程段 <span class="mono">BeginPull</span>（只写力累加器）⇒ <b>命中帧+2</b> 才积分成速度<br>
+        <b>时长(帧)</b> 仅拉力有效（0 = 不限）：到点时 <span class="mono">TryEarlyStopPull</span> 清速度 ——
+        ★ <b>只有序列里只剩它一个在册拉源才会清速度</b>（多源共存时到点不清速度）。
+        <br><b>方向模式</b>：<b>预设方向</b>（8 选一） = 力方向恒为指定方向，且<b>启用溅射降级判定</b>
+        （对应 <span class="mono">Nodes.Knockback._useSourceDirection</span> 为真）；<b>由力源计算</b> = 推力取「敌人 − 力源」（推离力源）、
+        拉力取「力源 − 敌人」（拉向力源，游戏行为），<b>不做降级判定</b>；非 8 方向的角度请用此模式。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="modtag">⑤</span>输出</h2>
+      <div class="row">
+        <button class="primary" id="run">▶ 模拟</button>
+        <button id="selftest">一键自检</button>
+        <button id="csv">导出 CSV</button>
+        <span id="summary" class="hint"></span>
+      </div>
+      <div id="trackBox"><svg id="track" class="svgfit" viewBox="0 0 546 378" width="546" height="378" style="border:1px solid var(--bd);border-radius:8px;background:var(--bg)"></svg></div>
+      <div class="hint" style="margin-top:8px">
+        「状态」列 = <b>本帧物理步所见</b>的状态（非失衡帧整段跳过物理步 ⇒ 位置冻结）；
+        「源数」= 本帧<b>帧首</b>在册的拉动源数（= 游戏里 <span class="mono">m_pullSources.Count</span>，帧末注销的源不计入）；
+        <span class="y">⚠</span> = 该帧触发<b>急停</b>（判据 A 距拉力终点 ≤ 0.05 ∨ 判据 B 距效果源 ≤ 0.6708，表内标 A/B）⇒ <span class="mono">TryEarlyStopPull</span> <b>清零速度一次</b>（不 <span class="mono">EndPull</span> ⇒ 失衡持续到拉力结束）。
+      </div>
+      <div style="margin-top:6px;overflow:auto"><table id="frtbl"></table></div>
+      <div id="selfbox"></div>
+    </div>
+
+    <div class="card">
+      <h2>实测对照（粘贴 帧,x,y 每行一条）</h2>
+      <div class="row"><label>实测第 1 帧 ↔ 模拟帧</label><input type="number" id="cmpoff" value="1" style="width:58px">
+        <span class="hint" id="cmpoffHint"></span></div>
+      <textarea id="obs" placeholder="1,5.446403,4&#10;2,5.563425,4"></textarea>
+      <div class="row"><button id="cmp">比对</button><span id="cmpout" class="hint"></span></div>
+      <div style="overflow:auto"><table id="cmptbl"></table></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2><span class="modtag">②</span>敌人参数</h2>
+      <div class="row"><label>起点 x</label><input type="number" id="sx" step="0.5" value="5"></div>
+      <div class="row"><label>起点 y</label><input type="number" id="sy" step="0.5" value="3"></div>
+      <div class="row"><label>重量等级</label><input type="number" id="ml" min="0" max="6" value="3">
+        <span class="hint">idx = 3 + (力级 − 重量级)</span></div>
+      <div class="row"><label>碰撞检测</label>
+        <select id="cdmode"><option value="1">Continuous（连续）</option><option value="0">Discrete（离散）</option></select></div>
+      <div class="row"><label>线性摩擦</label><input type="number" id="ff" step="0.1" value="1">
+        <span style="font-size:11px;color:var(--tx2)">× 0.1635 /帧</span></div>
+      <div class="hint">
+        线性摩擦 = 失衡态 <span class="mono">OnTick</span> 每帧把速度<b>模长</b>减
+        <span class="mono">grav·m·fricFactor·dt = 0.1635</span>（只缩模长、不改方向，与是否撞墙无关）。
+        与「高级参数」里的<b>接触摩擦 μ</b> 是两回事。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="modtag">④</span>高级参数</h2>
+      <div class="row"><label>接触摩擦 μ</label><input type="number" id="mu" step="0.05" min="0" value="0.4"></div>
+      <div class="hint" style="margin-top:-4px">
+        速度轮里 <span class="mono">p.t = clamp(p.t − vt, ±μ·p.n)</span>；
+        μ=0.4 = Unity 默认，「测试9」实测钉到 <b>0.400</b>（0.399/0.401 误差差 7 倍）
+        ⇒ 斜向接触时法向冲量按 μ 比例吃掉切向速度。
+      </div>
+      <details style="margin-top:8px">
+        <summary>更多（⚠ 未定案项）</summary>
+        <div class="row"><label>每帧步数</label><input type="number" id="spf" min="1" max="3" value="1">
+          <span class="hint">正常战斗由 Unity 追赶，未确认恒为 1</span></div>
+        <div class="row"><label>刀锋 cd=0</label><select id="blade"><option value="auto">自动（相交⇒常规 / 相切⇒TOI）</option><option value="1">强制按 TOI</option><option value="0">强制按常规 REG</option></select></div>
+        <div class="row"><label>最大帧数</label><input type="number" id="maxf" value="60"></div>
+      </details>
+      <div id="derive" class="okbox" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>判据速查</h2>
+      <div class="hint">
+        <b>退出失衡</b>（<span class="mono">UnbalanceState.OnTick</span>，物理步之前每帧一次，顺序固定）：<br>
+        <span class="mono">|v| ≤ 0.1</span> <b>且</b> 硬直窗已过（<span class="mono">fixedPlayTime ≥ protectTime</span>）
+        <b>且 在册拉动源数 = 0</b> ⇒ 关箱、残差冻结。<br>
+        ★ 摩擦<b>先</b>判、源数<b>后</b>判 ⇒ 源非空即留（哪怕已停下）；出界 / 浮空 / 眩晕另有旁路，本工具不建模。<br>
+        ★ <b>只有拉力登记源</b>（推 = <span class="mono">KnockBack</span>，只加一次 Impulse、<b>不登记</b>）
+        ⇒ <b>推不延长失衡</b>；被推被拉时，退出时机完全由拉源何时 <span class="mono">EndPull</span> 决定。<br>
+        ★ 硬直窗 = <span class="mono">fixedPlayTime + 0.1s</span>，只由 <span class="mono">BeginPull</span> /
+        <span class="mono">KnockBack</span> 的<b>施力帧</b>刷新 —— <span class="mono">StillPull</span> <b>不刷</b>。<br>
+        <span class="mono">TryEarlyStopPull</span> 只在 <span class="mono">m_pullSources.Count == 1</span> 且就是本源时清速度。<br>
+        <br>
+        通道开关：<span class="mono">cd &lt; 0 ⇒ 常规</span>；<span class="mono">0 ≤ cd &lt; 0.09625 ⇒ TOI</span>；<span class="mono">cd ≥ 0.09625 ⇒ 无 TOI</span><br>
+        常规位置轮：浅档（<span class="mono">|sep| ≤ 3·slop</span>）1 轮，深档 3 轮，系数 0.2<br>
+        TOI 位置轮：系数 0.75，上限 20，出口 <span class="mono">d ≤ 0.0025</span><br>
+        <span class="mono">vn &lt; 0</span> ⇒ 推力被墙吃掉（与力度无关）；<span class="mono">vn &gt; 0</span> ⇒ 保留并叠加<br>
+        ⚠ <b>两种摩擦别混</b>：① <b>线性摩擦</b> = OnTick 每帧减 <span class="mono">0.1635</span>（与接触无关）；
+        ② <b>接触切向摩擦</b> = 速度轮里 <span class="mono">clamp(p.t−vt, ±μ·p.n)</span>（先切向后法向 8 轮，
+        <b>首轮 maxF=0</b> ⇒ 摩擦从第二轮才起作用）<br>
+        ★ 拉力衰减 <span class="mono">(当前距离 / totalDist)⁴</span>，<span class="mono">totalDist</span> 在「推进 2」测一次后固定；
+        当前距离 &gt; <span class="mono">totalDist</span> ⇒ 该帧系数取 1<br>
+        ★ <b>急停 = 两条判据（A ∨ B）</b>：<b>A</b> 距<b>拉力终点</b>（= 力源 src）≤ <b>0.05</b>（<span class="mono">CheckDistance</span>）；<b>B</b> 距<b>效果源</b>（= 施力者/干员中心）≤ <b>0.6708</b>（地面阻挡 = √(0.49999−0.05)；空中 0.86601）⇒
+        <span class="mono">TryEarlyStopPull</span> <b>清零速度一次</b>（<span class="mono">Count==1</span> 且本源才清）、但<b>不 EndPull</b> ⇒ 失衡持续到拉力结束
+        （两条判据都在拉拽协程主循环）
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script id="sim-core">
+/* ============================================================
+   失衡位移模拟核心（无 DOM 依赖，可被 Node 直接 eval 做自检）
+   依据：物理模拟步逐项还原；常量取自客户端 Physics2DSettings
+   ============================================================ */
+var SIM = (function () {
+'use strict';
+
+var K = {
+  dt: 1/30,
+  slop: 0.005,
+  TR: 0.11,            // totalRadius = 胶囊 0.1 + 墙 skin 0.01
+  bg: 0.2,             // 位置校正系数
+  toiBg: 0.75,         // TOI 位置校正系数
+  posIters: 3,
+  toiIters: 20,
+  maxSubSteps: 8,      // 每条 contact 的 toiCount 上限（= 8）
+  velIters: 8,
+  toiWin: 0.09625,     // target + tolerance
+  toiTarget: 0.095,
+  maxCorr: 0.2,
+  minSpd: 0.1,
+  protectFrames: 4,
+  mass: 1,
+  grav: 9.81,
+  fricFactor: 0.5,
+  pushForces: [0,100,200,400,450,530,580],
+  pullForces: [0,2,10,40,42,44,46],
+  zeroIndex: 3,
+  capR: 0.1,           // 胶囊半径（= 半宽）
+  capH: 0.2,           // 中轴线段长度：y-0.2 .. y
+  mu: 0.4,             // ★ 接触摩擦系数（Unity PhysicsMaterial2D 默认 0.4）——
+                       //   「测试9」实测把 μ 钉在 0.400（0.399/0.401 误差都差 7 倍）
+  exitTolReg: 0.01,    // 常规出口：sep >= -3*slop  ⇔ d <= 0.01
+  exitTolTOI: 0.0025,  // TOI  出口：sep >= -1.5*slop ⇔ d <= 0.0025
+  tooCloseSqr: 0.0625,  // ★ Nodes.Knockback.TOO_CLOSE_TOLERANCE_SQR（= 0.25²）⇒ 距效果源 ≤0.25 格判「太近」
+  stopRadius: 0.05,     // ★ 判据 A（到点容差）：距【拉力终点 = 力源 src】≤ 0.05 ⇒ 急停
+                        //   CheckDistance(敌.mapPosition, m_pullBackDestination, 0.05)
+  blockRadius: 0.6708,  // ★ 判据 B（急停半径）：距【效果源 effSrc = 施力者(干员)中心】≤ √(blockRadiusSquare − 0.05)
+                        //   Character.get_blockRadiusSquare 地面 0.49999(=0.7071²) ⇒ √0.44999 = 0.6708；空中 0.799951(=0.8944²) ⇒ 0.86601
+                        //   任一命中 ⇒ 本帧力归零 + TryEarlyStopPull 清速度一次（不 EndPull）
+};
+K.decel = K.grav * K.mass * K.fricFactor * K.dt;   // 0.1635
+/* ★ 4 方向量化（对齐 SharedConsts.FOUR_WAYS：0=上 1=右 2=下 3=左；分界 ±45°）
+   MapUtil.ParseDirection 用的方向表就是 FOUR_WAYS（SharedConsts 静态方向表）⇒
+   「太歪」的判据 = 把「目标−源」量化到 4 方向后与「源朝向」**不相等**，不是 dot 阈值。 */
+var DIR4 = [{x:0,y:1},{x:1,y:0},{x:0,y:-1},{x:-1,y:0}];
+function quant4(x, y){
+  var bi = 0, bd = -2;
+  for (var i = 0; i < 4; i++){
+    var d = x * DIR4[i].x + y * DIR4[i].y;
+    if (d > bd){ bd = d; bi = i; }
+  }
+  return bi;
+}
+
+function roundHalfUp(v){ return Math.floor(v + 0.5); }        // RoundToInt（半数向上）
+
+/* ---------- 几何：竖直胶囊（中轴线段 + 半径 0.1） vs 1×1 墙格 box ---------- */
+function boxOf(c){ return {x0:c[0]-0.5, x1:c[0]+0.5, y0:c[1]-0.5, y1:c[1]+0.5}; }
+
+/* 
+一项机制差异：本模拟器使用同帧施加拉力-结算位移的顺序，所以令n+1（弹道结束帧）依然有力；实际游戏中，从命中后2帧开始每帧将上一帧施加的拉力积分为速度，然后进行位移，然后再施加力，所以n+1帧是位移-拉力结束-不再施力，与模拟器不同。
+圆(核心点 c) vs AABB(核心 b) 的最近特征与接触法线。
+   圆 vs 盒碰撞语义：
+     · 圆心落进盒核心内  ⇒ 逃逸面法线（取最短穿透轴，轴对齐）。
+     · 圆心在盒核心外    ⇒ 最近特征有两种：
+         面(face)   ⇒ 该面外向法线（轴对齐）；
+         顶点/墙角(vertex) ⇒ 法线 = normalize(圆心 − 顶点)，即【对角线】。
+   ★★ 已对到实机：
+     碰撞选面 = 多边形 SAT+裁剪 ＋一条【角接触补救支】。
+     判据 = **入射边是否落在参考面段内**：在 ⇒ 面接触（面法线）；不在 ⇒ 补救支写 1 点 e_circle，
+     世界法线由下游的流形初始化算 normalize(cB − cA)（= 圆心−角点）。
+     与参考实现差异只有一处：裁剪侧平面【不按 totalRadius 外扩】。
+     对拍（x=5.395, y=3.49 / 墙格 (6,3)(6,4)）：下格面接触 n=(−1,0)、sep=−0.005；
+     上格补救支 n=(−0.9955,−0.0948)、sep=−0.004525 —— 与本工具数值逐位吻合。
+
+   ★★ 与引擎逐格对拍（13920 构型）：**99.93% 完全一致**（角接触点数已对齐）。
+     角接触（region==='vertex'）= 引擎的 e_circle 补救支 ⇒ manifold 只有【1 个点】：
+     manifoldAt 记 only = 控制点索引、P 上限 1，posCorrect 只处理该点（⚠ 只降不造：够不到时 P 仍为 0）。
+     残差 10 个构型（0.07%）= cap 圆心恰落在面段端点上的退化构型（测度零）。
+     标定自检 6/6 通过；"上推贴角"场景轨迹与改前逐位相同（该场景位移全来自速度轮，与点数无关）。
+     ★ 关键：旧版 manifoldAt 恒把法线当轴对齐（只给 ±x / ±y），
+       在「墙角接触」处既丢了法线方向、又丢了其可观的分离距离 ⇒ 正是
+       上推贴角「实际向左、模拟器 x 冻结」偏差的根源。
+   return {n, sepCore(核心有符号距离), planePoint(分离量基准点),
+           region:'inside'|'face'|'vertex', v(顶点), tie}
+   ★ planePoint 必须一并带出：流形的分离量是
+     separation = dot(clipPoint(圆心) − planePoint, normal) − radiusA − radiusB，
+     而 planePoint 按支路取【角点 / 垂足 / 面中点】—— 不是"盒心 ± 0.5"。 */
+function circleVsBox(c, b) {
+  var px = Math.max(b.x0, Math.min(c.x, b.x1));   // 盒上最近点（clamp）
+  var py = Math.max(b.y0, Math.min(c.y, b.y1));
+  var cx = (b.x0 + b.x1)/2, cy = (b.y0 + b.y1)/2;
+  var dx = c.x - px, dy = c.y - py;
+  if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) {
+    // 圆心在盒核心内 ⇒ 逃逸面 = 最短穿透轴（轴对齐）
+    var dL = c.x - b.x0, dR = b.x1 - c.x, dB = c.y - b.y0, dT = b.y1 - c.y;
+    var depths = [dL, dR, dB, dT];
+    var m = Math.min(dL, dR, dB, dT);
+    var hits = depths.filter(function(z){ return Math.abs(z - m) < 1e-12; });
+    // ★ 平票恒 +x（实测补丁，非引擎行为；对应实现会取底边 −y）
+    if (hits.length > 1) { return {n:{x:1, y:0}, sepCore:-m,
+      planePoint:{x:cx + 0.5, y:cy}, region:'inside', tie:true}; }
+    var n; if (dL === m) n = {x:-1,y:0}; else if (dR === m) n = {x:1,y:0};
+    else if (dB === m) n = {x:0,y:-1}; else n = {x:0,y:1};
+    // planePoint = 该面中点 = 盒心 + 0.5·n ⇒ dot(圆心 − pp, n) = −m
+    return {n:n, sepCore:-m, planePoint:{x:cx + 0.5*n.x, y:cy + 0.5*n.y},
+            region:'inside', tie:false};
+  }
+  var L = Math.hypot(dx, dy) || 1e-12;
+  var n = {x: dx/L, y: dy/L};
+  var atX = (px === b.x0 || px === b.x1), atY = (py === b.y0 || py === b.y1);
+  var v = (atX && atY) ? {x:px, y:py} : null;      // 最近点恰是盒角 ⇒ 墙角
+  // planePoint：墙角支 = 角点；面支 = 垂足（= 面中点，dot 等价）
+  return {n:n, sepCore:L, planePoint:{x:px, y:py}, region: v ? 'vertex' : 'face', v:v, tie:false};
+}
+
+function manifoldAt(px, py, wall) {
+  var b = boxOf(wall);
+  // 竖直胶囊 = 两 cap 圆心：上(px,py) 下(px,py−capH)，各自对盒求最近特征
+  var caps = [{x:px, y:py}, {x:px, y:py - K.capH}];
+  var f0 = circleVsBox(caps[0], b), f1 = circleVsBox(caps[1], b);
+  var f1Wins = (f1.sepCore < f0.sepCore);
+  var best = f1Wins ? f1 : f0;
+  // ★ 控制点索引（在 pts = [下cap, 上cap] 里）：角接触（引擎的 e_circle 补救支）只有【1 个点】，
+  //   就是"离参考特征更近的那个 cap"；面支/体内支沿用两点。
+  var only = (best.region === 'vertex') ? (f1Wins ? 0 : 1) : -1;   // 仅"角接触"单点；面支/体内支仍两点
+  var i, tie = false;
+  // ★ 完全嵌入（两 cap 都在盒核心内）：选面 = 整胶囊 SAT —— 测试6 实测定标。
+  //   s_i = min over 两端点 dot(n_i, cap − v_i)（= 胶囊支撑点到该面的有号距离），取 max s_i 的面；
+  //   等价于"整只胶囊退出该面所需平移最短"（MTV），平票归 +x（测试5/6 同源）。
+  //   结构印证：把胶囊做成 2-gon 走标准多边形 SAT（选面结果相同）；
+  //   ⚠ 此支为实测规则 + 结构近似。
+  if (f0.region === 'inside' && f1.region === 'inside') {
+    only = -1;                       // 完全嵌入：MTV 选面后仍是"整胶囊"（两点），实测标定见测试 6
+    var cx = (b.x0 + b.x1)/2, cy = (b.y0 + b.y1)/2;
+    // 面顺序 [+x, -x, +y, -y]，严格 > ⇒ 平票归首个(+x)
+    var cand = [
+      {nx: 1, ny: 0, s: Math.min(caps[0].x, caps[1].x) - b.x1},
+      {nx:-1, ny: 0, s: b.x0 - Math.max(caps[0].x, caps[1].x)},
+      {nx: 0, ny: 1, s: Math.min(caps[0].y, caps[1].y) - b.y1},
+      {nx: 0, ny:-1, s: b.y0 - Math.max(caps[0].y, caps[1].y)}
+    ];
+    var bi = 0;
+    for (i = 1; i < 4; i++) if (cand[i].s > cand[bi].s) bi = i;
+    for (i = 0; i < 4; i++) if (i !== bi && Math.abs(cand[i].s - cand[bi].s) < 1e-12) tie = true;
+    best = {n:{x:cand[bi].nx, y:cand[bi].ny}, sepCore:cand[bi].s, tie:tie,
+            planePoint:{x:cx + 0.5*cand[bi].nx, y:cy + 0.5*cand[bi].ny}, region:'inside', v:null};
+  }
+  var n = best.n, cd = best.sepCore, pp = best.planePoint;
+
+  // 接触点数 P：两端点沿法向的【核心】分离量 ≤ TR 才算（上限 2）
+  // 接触点分离量 sep_i = 核心分离量 − TR（墙 skin 0.01 + 胶囊半径 0.1）
+  // ★ 口径 = 流形语义：sep_i = dot(圆心 − planePoint, n) − TR，
+  //   planePoint 由【控制特征】决定（墙角支 = 角点 / 面支 = 垂足 / 体内支 = 面中点）。
+  //   旧版一律按面公式「(圆心 − 盒心)·n − 0.5」⇒ 对角法线（墙角）下偏大
+  //   (角点 − 盒心)·n − 0.5（≈0.045）= 误判 P=0、位置轮空转。
+  var pts = [{x:px, y:py-K.capH}, {x:px, y:py}];
+  var seps = [], P = 0;
+  for (i = 0; i < pts.length; i++){
+    var coreSep = (pts[i].x - pp.x)*n.x + (pts[i].y - pp.y)*n.y;
+    seps.push(coreSep - K.TR);
+    if (coreSep <= K.TR) P++;
+  }
+  // ★ 角接触：引擎的补救支只写 1 个点 ⇒ 点数上限为 1；但【不凭空造接触】（够不到时 P 仍为 0）
+  if (best.region === 'vertex') { P = (P > 0) ? 1 : 0; if (P > 0) seps = [cd - K.TR]; }
+  var sep = cd - K.TR;
+  // ★ 刀锋(cd=0) 的裁决（⚠ 近似规则，依据距离求解的退化分支）：
+  //   距离求解（不把半径算入）在"simplex 含原点"时【不置零】，distance 由 witness points 算出：
+  //     真重叠（simplex 达 count=3，两点重合）⇒ distance = 0     ⇒ e_overlapped ⇒ TOI 弃权（走常规）
+  //     仅相切（退化 break，两点极近不重合）⇒ distance = 0⁺      ⇒ e_touching  ⇒ TOI 接管
+  //   本工具用几何判据近似这两条路径；三场景实测（沿缝/测试4/测试5）逐位吻合
+  var yOverlap = Math.min(py, b.y1) - Math.max(py - K.capH, b.y0);
+  var xInside = (px >= b.x0 - 1e-12 && px <= b.x1 + 1e-12);
+  var coreInt = xInside && yOverlap > 1e-9;
+  return {wall: wall, n: n, cd: cd, sep: sep, P: P, seps: seps, tie: tie,
+          planePoint: pp, only: only,
+          coreInt: coreInt, touch: (sep <= 0), region: best.region, vertex: best.v};
+}
+
+function manifoldsAt(px, py, walls) {
+  var out = [];
+  for (var i=0;i<walls.length;i++){
+    var m = manifoldAt(px, py, walls[i]);
+    if (m.touch || m.cd < K.toiWin) out.push(m);     // 只保留可能参与约束的
+  }
+  // ★★ 接触处理顺序（【tile 序】，不再是"深者先"启发式）
+  //   引擎机制链：
+  //     AllocateNode（id = 空闲链节点下标）
+  //       → UpdatePairs 按 (proxyIdA,proxyIdB) 升序排序（_Sort_unchecked）
+  //       → OnContactCreate 把接触 push_back 进数组（data[count]=contact；
+  //         下标回写回 contact；世界侧数组 = ContactManager 的接触数组）
+  //       → SolveTOI 正向遍历该数组
+  //       → 选 minContact 用【严格小于】 ⇒ 迭代序靠前者胜
+  //   ⇒ 同一批创建的地块墙，其顺序 = 地图 tile 序（实测口径：越靠下越靠左优先）。
+  //   ⚠ "越靠下"这一维尚无实测（游戏内做不出上下墙缝构型）⇒ 存疑，暂按 y 升序处理。
+  //   ⚠ 销毁是 swap-remove（Destroy）⇒ 数组序只在"无销毁扰动"时 = 创建序。
+  // ★★ 多次实测修正：**取消一切几何排序** —— 数组序即引擎序。
+  //   机制：
+  //     SolveTOI 是 for(;;) 子步循环；每子步重算 α（清 toiFlag）⇒ minContact 在两墙间【交替】；岛序 = [minContact, 邻居…]。
+  //   ⇒ 每个子步把位置推到 minContact 那一侧的不动点；两接触交替 ⇒ 偶数子步后回到起点侧。
+  //   ⚠ 原先的 sort(sep 升序,"深者先") 只是该交替在 2 接触构型下的投影，已作废。
+  return out;
+}
+
+function minCdAt(px, py, walls) {
+  var best = Infinity;
+  for (var i=0;i<walls.length;i++){
+    var m = manifoldAt(px, py, walls[i]);
+    if (m.cd < best) best = m.cd;
+  }
+  return best;
+}
+
+/* ---------- 宽相成对：fat AABB 重叠 ⇒ 进 m_contactList（★ 不要求接触） ----------
+   依据（实测）：
+     · 宽相外扩常量 = 0.1（建代理时 lowerBound − 0.1 / upperBound + 0.1）
+     · UpdatePairs 用 fat AABB 查询 —— 外扩的理由就是"现在没碰上、这一帧内可能碰上"
+   敌人 fat AABB = 紧 AABB [x−0.1,x+0.1]×[y−0.3,y+0.1] 再 ±0.1 ⇒ [x−0.2,x+0.2]×[y−0.4,y+0.2]
+   墙   fat AABB = 格 ±(0.5 + 0.01 contactOffset + 0.1)   = 格 ±0.61
+   ⚠ 注意：这里的 0.1 与 contactOffset(0.01) 无关，是宽相自己的外扩常量。 */
+function pairsAt(px, py, walls) {
+  var fx0 = px - K.capR - 0.1, fx1 = px + K.capR + 0.1;
+  var fy0 = py - K.capH - K.capR - 0.1, fy1 = py + K.capR + 0.1;
+  var out = [], i;
+  for (i = 0; i < walls.length; i++) {
+    var w = walls[i];
+    if (w[0] + 0.61 < fx0 || w[0] - 0.61 > fx1) continue;
+    if (w[1] + 0.61 < fy0 || w[1] - 0.61 > fy1) continue;
+    out.push(w);
+  }
+  return out;
+}
+
+/* ---------- 单条 contact 的 TOI 裁决 ----------
+   扫描区间 = sweep c0 → c：★【含常规 Solve 的位置修正位移，不是只扫 v·dt】（:693-694）
+       d0 ≤ 0                    ⇒ e_overlapped        ⇒ alpha = 1（本条不产生事件，:706-708）
+       0 < d0 < target+tol(0.09625) ⇒ e_touching @ t = 0  ⇒ alpha = 0（:321）
+       d0 ≥ target+tol           ⇒ 沿 c0→c 求 cd 降到【target = 0.095】的根（:410-433）
+                                    （★ tolerance 只做迭代停止判据，不是求根阈值 ——
+                                      ★ 测试 2 帧 9 实测 3.403800 反证：根在 0.095，不在 0.09625）
+                                    全程未降到 target ⇒ alpha = 1 */
+function toiAlphaOf(x0, y0, x1, y1, wall) {
+  var m0 = manifoldAt(x0, y0, wall);
+  var d0 = m0.cd;
+  // ★ 刀锋（cd == 0）必须再分两条路：核心相交（真重叠 ⇒ e_overlapped）vs 核心相切（e_touching ⇒ 触发）。
+  //   测试4 帧1 实测反证：cap 圆心恰落在墙底边上（cd=0, coreInt=false）
+  //   ⇒ 引擎按 e_touching 触发 TOI（并用 0.75 系数把它压到平衡位）。
+  if (d0 < 0) return { a: 1, cls: 'e_overlapped（cd<0）⇒ 本条不产生事件' };
+  if (Math.abs(d0) < 1e-12) {
+    if (m0.coreInt) return { a: 1, cls: '刀锋·核心相交 ⇒ e_overlapped（不产生事件）' };
+    return { a: 0, cls: '刀锋·核心相切 ⇒ e_touching@α=0（触发）' };
+  }
+  if (d0 < K.toiWin) return { a: 0, cls: 'e_touching@α=0（0<cd<0.09625）' };
+  if (manifoldAt(x1, y1, wall).cd >= K.toiTarget) return { a: 1, cls: '未降到 target=0.095 ⇒ 无事件' };
+  var lo = 0, hi = 1, i;
+  for (i = 0; i < 40; i++) {
+    var mid = (lo + hi) / 2;
+    if (manifoldAt(x0 + (x1 - x0) * mid, y0 + (y1 - y0) * mid, wall).cd > K.toiTarget) lo = mid; else hi = mid;
+  }
+  return { a: (lo + hi) / 2, cls: '扫掠求根（c0→c 全位移，阈值 target=0.095）' };
+}
+
+/* ---------- 速度约束（法向归零 + ★切向摩擦） ----------
+   ★★ 新增切向摩擦，依据速度约束求解语义：
+     每个接触点按【先切向后法向】交替迭代 `velIters`（=8）轮：
+       切向：vt = cross(v, n)，λ = −vt，上限 maxF = friction × （当前累积法向冲量 p.n）
+             p.t = clamp(p.t + λ, −maxF, +maxF)，Δλ = 新 − 旧 ⇒ v += Δλ·(n.y, −n.x)
+       法向：vn = v·n，p.n = max(p.n − vn, 0)，Δ = 新 − 旧 ⇒ v += Δ·n（只能推不能拉）
+     ⚠ 关键次序含义：**第一轮 maxF = 0**（累积法向冲量还是 0）⇒ 摩擦从第二轮才起作用；
+       这正是"斜向撞击时法向冲量按比例吃掉切向速度"的来源。
+     ⚠ 旧版只清法向（等价 μ≡0），故 mu 默认 0 ⇒ 既有标定用例逐位不变。 */
+function velSolve(st, mfs, mu) {
+  var notes = [];
+  var muC = (typeof mu === 'number' && mu >= 0) ? mu : 0;
+  var acc = mfs.map(function(){ return {n: 0, t: 0}; });     // 每 manifold 的累积冲量（1 点近似）
+  var it, i, lamTot = 0;
+  for (it = 0; it < K.velIters; it++) {
+    for (i = 0; i < mfs.length; i++) {
+      var m = mfs[i], n = m.n, a = acc[i];
+      // (a) 切向（先）
+      var vt = st.vx * n.y - st.vy * n.x;                    // 叉积(v, n)
+      var lam = -vt;                                         // tangentMass = 1/m = 1
+      var maxF = muC * a.n;
+      var nw = Math.max(-maxF, Math.min(maxF, a.t + lam));
+      lam = nw - a.t; a.t = nw; lamTot += Math.abs(lam);
+      st.vx += lam * n.y; st.vy += -lam * n.x;               // P = lam·叉积(n,1)
+      // (b) 法向（后，用更新后的速度）
+      var vn = st.vx * n.x + st.vy * n.y;
+      var l2 = -vn;
+      var nI = Math.max(a.n + l2, 0);
+      l2 = nI - a.n; a.n = nI;
+      st.vx += l2 * n.x; st.vy += l2 * n.y;
+    }
+  }
+  for (i = 0; i < mfs.length; i++) {
+    var n0 = mfs[i].n, vn0 = st.vx * n0.x + st.vy * n0.y;
+    notes.push('墙(' + mfs[i].wall[0] + ',' + mfs[i].wall[1] + ') 法向冲量 p.n=' + acc[i].n.toFixed(6) +
+      '、切向 p.t=' + acc[i].t.toFixed(6) + (muC > 0 ? '（μ=' + muC + '，上限 ' + (muC * acc[i].n).toFixed(6) + '）' : '（μ=0 ⇒ 无摩擦）') +
+      ' ⇒ 残余 vn=' + vn0.toFixed(6));
+  }
+  if (muC > 0) notes.push('切向摩擦累计清除 |Δv|≈' + lamTot.toFixed(6) + '（斜向撞击时法向冲量按 μ 比例吃掉切向速度）');
+  // ★ 结构化返回：mu = 本轮摩擦实际吃掉的切向速度总量（供「覆盖度自检」判定该机制是否被激活）
+  return {notes: notes, mu: lamTot};
+}
+
+/* ---------- 位置修正（整段；★ manifold 冻结于步首：法向/点归属不随位置重算，只更新分离量数值） ----------
+   逐轮 · 逐墙 · 逐点 记录 trace，用于"物理步逐步展开"展示；
+   ★ 分离量口径 = 流形语义：dot(圆心 − planePoint, n) − TR，
+     planePoint 用 manifoldAt 冻结下来的【控制特征点】（墙角支 = 角点）。
+     ⚠ 旧版用面公式「(圆心 − 盒心)·n − 0.5」，对角法线（墙角）下偏大 ⇒ d 偏小、欠修正。
+   ⚠【与引擎真实实现的差异标注】：
+     (a) 真实求解位置约束是【分块 LCP / Jacobian 权重加权】，多条接触一起对速度、位置同时作用；
+         本工具是【按 mfs 排序后的顺序、逐点串行叠加 corr】——单接触对下数值近似，多墙非对称时可能分叉。
+     (b) 本工具的迭代顺序 = manifoldsAt 的 sort(sep 升序，"重叠深先")≈启发式；实际引擎是 m_contactList 链表序（见下方标注）。
+     两处都属 ⚠ 推断级，已在 §11 未决项登记。 */
+function posCorrect(st, mfs, k, maxIter, tolD) {
+  var moved = 0, iters = 0, i, j;
+  var trace = [];                               // ★ 新增：逐轮 trace
+  for (var r=0;r<maxIter;r++){
+    var entryD = -Infinity;
+    for (i=0;i<mfs.length;i++){
+      var pp = mfs[i].planePoint;
+      var p0 = st.y - K.capH, p1 = st.y;
+      var cs0 = (st.x - pp.x)*mfs[i].n.x + (p0 - pp.y)*mfs[i].n.y;
+      var cs1 = (st.x - pp.x)*mfs[i].n.x + (p1 - pp.y)*mfs[i].n.y;
+      // ★ 角接触（mfs[i].only >= 0）只算控制点：引擎补救支的 manifold 只有 1 个点
+      var dd0 = (mfs[i].only === 1) ? -Infinity : -((cs0 - K.TR) + K.slop);
+      var dd1 = (mfs[i].only === 0) ? -Infinity : -((cs1 - K.TR) + K.slop);
+      if (dd0 > entryD) entryD = dd0;
+      if (dd1 > entryD) entryD = dd1;
+    }
+    if (entryD <= 0) break;
+    var mv = 0, stepRows = [];                  // 本轮每个接触点的处理记录
+    for (i=0;i<mfs.length;i++){
+      var m = mfs[i], pp = m.planePoint;
+      for (j=0;j<2;j++){
+        if (m.only === 0 && j === 1) continue;      // 角接触：只处理控制点（引擎 pointCount=1）
+        if (m.only === 1 && j === 0) continue;
+        // ★ 逐点用【当前位置】（顺序冲量语义：前一个点修正后，下一个点重算分离量）
+        //   ⚠ 旧版在轮首快照 pys=[st.y-capH, st.y]，y 向多点修正时第 2 点用旧 y ⇒ 多算（测试6-③ 逐位验证）
+        var pyj = (j === 0) ? st.y - K.capH : st.y;
+        var coreSep = (st.x - pp.x)*m.n.x + (pyj - pp.y)*m.n.y;
+        var d = -((coreSep - K.TR) + K.slop);
+        if (d <= 0) continue;
+        var corr = Math.min(k * d, K.maxCorr);
+        var bx = st.x, by = st.y;                // 处理前坐标
+        st.x += m.n.x * corr; st.y += m.n.y * corr;
+        mv += corr;
+        stepRows.push({wall: m.wall[0]+','+m.wall[1], nx: m.n.x, ny: m.n.y, point: j+1,
+                       d: d, corr: corr, bx: bx, by: by, ax: st.x, ay: st.y});
+      }
+    }
+    trace.push({iter: r+1, entryD: entryD, corrSum: mv, steps: stepRows});
+    moved += mv; iters++;
+    if (mv <= 0) break;
+    if (entryD <= tolD) break;      // 进入该轮时已收敛 ⇒ 跑完这一次后退出
+  }
+  return {moved: moved, iters: iters, trace: trace};
+}
+
+/* ---------- 单接触对版（TOI 逐事件语义：每次只解 toiIndex 双方的约束） ---------- */
+function posCorrectOne(st, m, k, maxIter, tolD) { return posCorrect(st, [m], k, maxIter, tolD); }
+
+/* ---------- 扫掠求 alpha（CCD） ---------- */
+function sweepAlpha(x0, y0, dx, dy, walls) {
+  var cdAt = function(t){ return minCdAt(x0 + dx*t, y0 + dy*t, walls); };
+  if (cdAt(0) <= K.toiTarget) return null;
+  if (cdAt(1) > K.toiTarget) return null;
+  var lo = 0, hi = 1;
+  for (var i=0;i<40;i++){
+    var mid = (lo+hi)/2;
+    if (cdAt(mid) > K.toiTarget) lo = mid; else hi = mid;
+  }
+  return (lo+hi)/2;
+}
+
+/* ---------- SolveTOI 子步循环（for(;;)） ----------
+   输入：步首位姿 (x0,y0) = sweep 起点 c0；常规 Solve 末位姿 (cx,cy) = sweep 终点 c
+   每子步：① 扫描 pairsAt 的全部 contact，逐条算 α（每子步重算）
+           ② 取 α 最小者（严格小于 ⇒ 先扫描到的胜）为 minContact；α≥1 或 toiCount>8 跳过
+           ③ Advance(α)：位置 = c0 + α(c − c0)
+           ④ 建岛 = [minContact, 邻居…]（引擎数组序，不排序）；位置解 0.75×≤20
+           ⑤ 结果写回 c0（子步间接力）；minContact.m_toiCount++
+   退出：无 contact 产生事件（α≥1），或全部 toiCount>8
+   ⚠ 子步内**不做位置积分**（实测 y 每帧只走一次弹道 ⇒ 积分只在常规 Solve 里做一次） */
+function toiSubSteps(x0, y0, cx, cy, walls, cfg, log) {
+  // s0 = 扫掠起点 c0（首子步 = 步首位姿；之后 = 上一子步岛解的写回位姿）
+  // pos = 当前位姿（无事件时 = 常规 Solve 末位姿 c）
+  var toiCount = {}, s0 = { x: x0, y: y0 }, pos = { x: cx, y: cy };
+  var steps = 0, lastTrace = null, rows = [], guard = 0, first = true, alpha1 = null;
+  for (;;) {
+    if (++guard > 200) break;                       // 安全上限（真实上限 = Σ(每接触 toiCount+1)）
+    var prs = pairsAt(s0.x, s0.y, walls);
+    // ★ 扫掠终点：第 1 子步 = 常规 Solve 末位姿 c（c0→c 全位移，含位置修正）
+    //   第 2 子步起 = 上一子步岛解结果 + dt_sub·v（子步尾部的位置积分
+    //   写 body.c；故 sweep = [c0, 上一子步结果 + 积分量]，量级 = dt·v）。
+    //   ⚠ 本工具不逐子步维护速度 ⇒ 第 2 子步起按【退化 sweep】(终点 = 起点)：只保留 t=0 裁决
+    //     （touching 判定与 sweep 无关；非 touching 直接 α=1）。测试4 实测反证此近似正确。
+    var ex = first ? cx : s0.x, ey = first ? cy : s0.y;
+    var minA = 1, minW = null, i;
+    for (i = 0; i < prs.length; i++) {
+      var key = prs[i][0] + ',' + prs[i][1];
+      if ((toiCount[key] || 0) > K.maxSubSteps) continue;      // toiCount > 8 跳过
+      var t = toiAlphaOf(s0.x, s0.y, ex, ey, prs[i]);
+      var a = t.a;
+      // UI 开发用覆盖：刀锋（cd=0）强制 TOI / 强制 REG（退化构型，实测不可得）
+      if (cfg && cfg.bladeToi !== undefined && Math.abs(manifoldAt(s0.x, s0.y, prs[i]).cd) < 1e-12)
+        a = cfg.bladeToi ? 0 : 1;
+      if (a < minA) { minA = a; minW = prs[i]; }               // ★ 严格小于 ⇒ 扫描序靠前者胜
+    }
+    if (minW === null || minA >= 1) {
+      rows.push('子步 ' + (steps + 1) + '：无事件 ⇒ 退出' + (prs.length ? '（' + prs.length + ' 条 contact 全部 α≥1 或被 toiCount 跳过）' : ''));
+      break;
+    }
+    var kw = minW[0] + ',' + minW[1];
+    // ③ Advance(α)
+    var ax = s0.x + (ex - s0.x) * minA, ay = s0.y + (ey - s0.y) * minA;
+    // ④ 建岛：minContact 第一，其余邻居按 pairs 序
+    var isl = [manifoldAt(ax, ay, minW)];
+    for (i = 0; i < prs.length; i++) if (prs[i] !== minW) isl.push(manifoldAt(ax, ay, prs[i]));
+    var sub = { x: ax, y: ay, vx: 0, vy: 0 };
+    var pr = posCorrect(sub, isl, K.toiBg, K.toiIters, K.exitTolTOI);
+    steps++;
+    if (alpha1 === null) alpha1 = minA;                        // 第 1 子步的 α（供剩余时间积分）
+    toiCount[kw] = (toiCount[kw] || 0) + 1;                    // 计数 +1
+    lastTrace = pr.trace;
+    rows.push('子步 ' + steps + '：minContact=(' + kw + ') α=' + minA.toFixed(6) +
+      ' 岛序=' + isl.map(function (m) { return '(' + m.wall[0] + ',' + m.wall[1] + ')'; }).join('→') +
+      '  ' + ax.toFixed(6) + ' → ' + sub.x.toFixed(6) + '（' + pr.iters + '轮，toiCount=' + toiCount[kw] + '）');
+    pos = { x: sub.x, y: sub.y };                              // ⑤ 岛解写回
+    s0 = { x: sub.x, y: sub.y };                               //    同时成为下一子步的扫掠起点
+    first = false;
+  }
+  if (log) {
+    log.push({ t: '\u2462 SolveTOI 子步循环（共 ' + steps + ' 个有效子步）',
+      d: rows.join('<br>'), trace: lastTrace });
+  }
+  return { x: pos.x, y: pos.y, steps: steps, alpha1: (alpha1 === null ? 0 : alpha1) };
+}
+
+/* ---------- 一个物理步（严格按引擎步进顺序） ---------- */
+function step(st, cfg) {
+  var log = [], walls = cfg.walls;
+  var x0 = st.x, y0 = st.y;
+
+  // ② Collide：窄相，约束集合冻结于【步首位姿】——逐接触列出全部 manifold
+  var mfs0 = manifoldsAt(x0, y0, walls);
+  var cRows = mfs0.map(function (m, ix) {
+    return '墙(<span class="mono">' + m.wall[0] + ',' + m.wall[1] + '</span>) ' +
+      (ix === 0 ? '<b>最近</b> ' : '') +
+      'n=(' + m.n.x.toFixed(4) + ',' + m.n.y.toFixed(4) + ') ' +
+      (m.region === 'vertex' ? '<span class="y">[墙角' + (m.vertex ? ' ' + m.vertex.x + ',' + m.vertex.y : '') + ']</span>' :
+        m.region === 'inside' ? '<span class="y">[体内]</span>' : '[面]') +
+      (m.tie ? ' <span class="y">\u2605平票\u21d2+x</span>' : '') +
+      ' cd=' + m.cd.toFixed(6) + ' sep=' + m.sep.toFixed(6) +
+      ' P=' + m.P + (m.touch ? '' : ' <span class="tx3">(sep>0 未触)</span>');
+  });
+  log.push({ t: '\u2461 Collide（约束集冻结于步首位姿 · 逐接触）',
+    d: cRows.length ? cRows.join('<br>') : '\u2014 无接触 \u2014' });
+
+  // 力：v += dt*F/m（gravityScale=0，只有拉力有持续力）
+  if (st.fx || st.fy) {
+    st.vx += K.dt * st.fx / K.mass;
+    st.vy += K.dt * st.fy / K.mass;
+    log.push({ t: '\u00b7 \u65bd\u529b', d: 'F=(' + st.fx.toFixed(3) + ',' + st.fy.toFixed(3) + ') \u21d2 v=(' + st.vx.toFixed(6) + ',' + st.vy.toFixed(6) + ')' });
+  }
+
+  // 逐接触归类（仅展示：真正的裁决在子步循环里逐子步做）
+  var chTrace = [], i;
+  for (i = 0; i < mfs0.length; i++) {
+    var m0 = mfs0[i];
+    var e;
+    if (!m0.touch) e = { w: m0.wall[0] + ',' + m0.wall[1], cd: m0.cd, cls: '无接触（sep>0）' + (Math.abs(m0.cd) >= K.toiWin ? '，距窗口较远' : '，不参与') };
+    else if (m0.cd > 0 && m0.cd < K.toiWin) e = { w: m0.wall[0] + ',' + m0.wall[1], cd: m0.cd, cls: 'e_touching@α=0（0<cd<0.09625）' };
+    else if (Math.abs(m0.cd) < 1e-12) e = { w: m0.wall[0] + ',' + m0.wall[1], cd: m0.cd, cls: '刀锋 cd=0 ⇒ ' + (m0.coreInt ? '核心相交 ⇒ e_overlapped（不产生事件）' : '核心相切 ⇒ e_touching') };
+    else e = { w: m0.wall[0] + ',' + m0.wall[1], cd: m0.cd, cls: 'overlapped（cd<0）⇒ 本条不产生事件（仍可作邻邻居参与位置解）' };
+    chTrace.push(e);
+  }
+  log.push({ t: '\u2461 通道判定（逐接触）', d: chTrace.map(function (e) {
+    return '墙(' + e.w + ') cd=' + e.cd.toFixed(6) + ' ⇒ ' + e.cls;
+  }).join('<br>') });
+
+  // ③ 常规 Solve（无条件执行：引擎 Step 里 Solve 与 SolveTOI 是先后两段，互不排斥）
+  var vs0 = velSolve(st, mfs0, (cfg.mu == null) ? K.mu : cfg.mu);
+  var muSum = vs0.mu;                  // ★ 本步内切向摩擦吃掉的速度总量（供「覆盖度自检」）
+  log.push({ t: '\u2462 常规 Solve \u00b7 速度轮 \u00d7' + K.velIters, d: vs0.notes.length ? vs0.notes.join('\uff1b') : '\u65e0\u63a5\u89e6' });
+  var ix0 = st.vx * K.dt, iy0 = st.vy * K.dt;
+  st.x += ix0; st.y += iy0;
+  log.push({ t: '\u00b7 \u79ef\u5206', d: '\u0394=(' + ix0.toFixed(6) + ',' + iy0.toFixed(6) + ')' });
+  var anyTouch = false;
+  for (i = 0; i < mfs0.length; i++) if (mfs0[i].sep <= 0) { anyTouch = true; break; }
+  if (anyTouch) {
+    var pr2 = posCorrect(st, mfs0, K.bg, K.posIters, K.exitTolReg);
+    log.push({ t: '\u00b7 \u4f4d\u7f6e\u8f6e\uff080.2\uff0c\u4e0a\u9650 3\uff09',
+      d: pr2.iters + ' \u8f6e\uff0c\u7d2f\u8ba1\u4fee\u6b63 ' + pr2.moved.toFixed(6), trace: pr2.trace });
+  }
+  var cx1 = st.x, cy1 = st.y;   // ★ sweep 的 c（含常规位置修正位移），供子步循环扫掠 c0→c
+
+  // ④ SolveTOI 子步循环（continuous=false 为 UI 开发开关 ⇒ 整段跳过）
+  var loop = (cfg.continuous === false) ? { x: st.x, y: st.y, steps: 0 }
+                                        : toiSubSteps(x0, y0, cx1, cy1, walls, cfg, log);
+  st.x = loop.x; st.y = loop.y;
+
+  // ⑤ 末位姿速度轮（★ 仅当子步循环真的跑过：引擎的速度约束只在 TOI 岛内做）
+  //    + 第 1 子步之后的剩余时间积分 (1−α₁)·dt·v（v 取速度轮之后 ⇒ 法向分量已清零：
+  //      测试2 帧10 的墙底水平法线把 vy 清零 ⇒ 无积分；测试7/8 的竖直法线不动 vy ⇒ 有积分）
+  if (loop.steps) {
+    var mfsF = manifoldsAt(st.x, st.y, walls);
+    var vn1 = velSolve(st, mfsF);
+    log.push({ t: '\u2462 \u672b\u4f4d\u59ff\u901f\u5ea6\u8f6e \u00d7' + K.velIters, d: vn1.length ? vn1.join('\uff1b') : '\u65e0\u63a5\u89e6' });
+    var ixR = st.vx * (1 - loop.alpha1) * K.dt, iyR = st.vy * (1 - loop.alpha1) * K.dt;
+    st.x += ixR; st.y += iyR;
+    log.push({ t: '\u00b7 \u5b50\u6b65\u79ef\u5206\uff08(1\u2212\u03b1)\u00b7dt\uff09',
+      d: '\u0394=(' + ixR.toFixed(6) + ',' + iyR.toFixed(6) + ')' });
+  }
+
+  // ★ 实机位置以 float32 存储（单精度）——每步末尾量化，保证与实测同精度
+  st.x = Math.fround(st.x); st.y = Math.fround(st.y);
+  log.push({ t: '\u2463 ClearForces + float32 \u5b58\u50a8', d: '(' + st.x.toFixed(7) + ', ' + st.y.toFixed(7) + ')' });
+  return { ch: loop.steps ? 'TOI' : (anyTouch ? 'REG' : 'NONE'), log: log, mu: muSum };
+}
+
+/* ---------- cfg 归一化：把「单力 cfg」与「forces 序列」统一成事件数组 ----------
+   事件字段（kind = pushProj | pushDirect | pull）：
+     hitFrame        命中帧（时间轴锚点，1 基；★ 与 maxFrames 同一时间轴）
+     forceLevel / massLevel   力度档（idx = zeroIndex + 力级 − 重量级）
+     dir / dirSrc    推的方向（dirSrc='link' ⇒ 用 src 现算）
+     src             拉拽原点（拉）/ 溅射判据源（推）
+     prj             弹道位（拉力衰减参照）；缺省 = src
+     decay / totalDistance    拉力衰减 (d/totalDistance)^4；totalDistance=null ⇒ BeginPull 帧现测
+     duration        拉力时长 ★单位 = 帧
+     expireStop      到点是否清速度（TryEarlyStopPull）
+     pullEnd         对照截断帧（默认 999）
+     sourceId        源身份（默认 = 事件下标）
+   派生：gate = hitFrame + 1（拉）；expireF = hitFrame + duration（帧数直接相加）
+   ★ 向后兼容：cfg 无 forces 时，由旧单力字段合成 1 个事件（旧 pullDuration 单位是秒 ⇒ 换算成帧） */
+function normalizeForces(cfg) {
+  if (cfg.forces && cfg.forces.length) {
+    return cfg.forces.map(function (e, i) {
+      var o = {}, kk;
+      for (kk in e) o[kk] = e[kk];
+      if (o.sourceId == null) o.sourceId = i;
+      if (o.hitFrame == null) o.hitFrame = 1;
+      if (o.pullEnd == null) o.pullEnd = 999;
+      if (o.expireStop == null) o.expireStop = (cfg.pullExpireStop !== 'none');
+      if (o.splash == null) o.splash = !!cfg.splash;   // ★ 溅射开关从 cfg 继承（事件未显式给时）
+      if (o.dirMode == null) o.dirMode = 'preset';      // ★ 缺省：力方向由 dir 指定（= _useSourceDirection 为真 ⇒ 启用溅射降级判定）
+      return o;
+    });
+  }
+  var isPull = cfg.mode === 'pull';
+  return [{
+    kind: cfg.mode,
+    hitFrame: (cfg.mode === 'pushDirect') ? 0 : 1,   // 旧 pushDirect = 「上一帧物理步之后」施力 ⇒ 帧1 生效
+    gate: isPull ? (cfg.pullStart == null ? 2 : cfg.pullStart) : null,
+    forceLevel: cfg.forceLevel,
+    massLevel: cfg.massLevel,
+    dir: cfg.dir,
+    dirSrc: cfg.dirSrc,
+    src: cfg.src,
+    prj: cfg.prj,
+    splash: cfg.splash,
+    awayDir: cfg.awayDir,
+    decay: cfg.decay,
+    totalDistance: cfg.totalDistance,
+    duration: (isPull && cfg.pullDuration > 0) ? Math.round(cfg.pullDuration / K.dt) : 0,
+    expireStop: (cfg.pullExpireStop !== 'none'),
+    pullEnd: cfg.pullEnd || 999,
+    sourceId: 0
+  }];
+}
+
+/* ---------- 主模拟：施力序列 + 多源退出 ----------
+   ★ 与游戏的对应：
+     · 失衡状态机：帧首 OnTick 判退出（摩擦优先 → m_pullSources 兜底）；力事件施力 ⇒ 进入/重入失衡
+     · 只有拉力登记源（KnockBack 不登记）⇒ 推不延长失衡
+     · TryEarlyStopPull 仅在「在册源数 == 1 且就是本源」时清速度
+     · 急停半径：进入效果源半径 ⇒ TryEarlyStopPull 清零速度一次（不 EndPull ⇒ 失衡持续到拉力结束，见帧末 (d)） */
+function simulate(cfg) {
+  var events = normalizeForces(cfg);
+  var maxF = cfg.maxFrames || 60;
+  var wallSet = cfg.walls;
+  var st = { x: cfg.start.x, y: cfg.start.y, vx: 0, vy: 0, fx: 0, fy: 0 };
+  var frames = [], k, i, ei;
+
+  /* ── 事件派生：力度 / 方向 / 溅射降级 / 时间轴 ── */
+  var deadN = 0;
+  for (ei = 0; ei < events.length; ei++) {
+    var e = events[ei];
+    e._dead = false;
+    if (!e.effSrc) e.effSrc = e.src;                    // ★ 效果源缺省 = 力源（向后兼容旧 cfg）
+    var idx = K.zeroIndex + (e.forceLevel - e.massLevel);
+    var fv;
+    if (e.kind === 'pull') {
+      if (idx < 0 || idx >= K.pullForces.length) { e._dead = true; deadN++; e._err = '拉不动（idx=' + idx + '）'; continue; }
+      fv = K.pullForces[idx];
+    } else {
+      if (idx < 0 || idx >= K.pushForces.length) { e._dead = true; deadN++; e._err = '推不动（idx=' + idx + '）'; continue; }
+      fv = K.pushForces[idx] * 0.01;
+    }
+    if (fv === 0) { e._dead = true; deadN++; e._err = '力度为 0（等级差 < −2）'; continue; }
+
+    var dir = e.dir || { x: 0, y: 0 };
+    if (e.dirSrc === 'link' && e.src) {
+      var lx = cfg.start.x - e.src.x, ly = cfg.start.y - e.src.y, L = Math.hypot(lx, ly) || 1;
+      dir = { x: lx / L, y: ly / L };
+    }
+    // ★ 溅射降级（仅推力；拉力无此机制）—— 对齐 Nodes.Knockback.Execute：
+    //   总开关 _useSourceDirection 为假 ⇒ 整段不判、方向直接取归一化径向。
+    //   ⇒ 本工具用「方向模式 = 预设角度」等价表示该开关为真（力方向 = 源朝向）。
+    //   两个降级判据（任一成立即降级，降级量 = _decreaseForceLevelWhenNotInDirection）：
+    //     ① 距离：TOO_CLOSE_TOLERANCE_SQR(0.0625) >= |目标 − 源|²   （即 ≤ 0.25 格）
+    //     ② 方向：ParseDirection(目标 − 源) != source.direction      （★ 4 方向枚举不等，等价夹角 > 45°）
+    //   降级动作：力度等级 −= 降级量（默认 2），且方向 = NormalizeDirectionSafely(目标 − 源)（径向）。
+    //   ⚠ 降级量的实际配置值未在配置表中检索到 ⇒ 默认 2（实测口径），可用事件字段 decreaseLevel 覆盖。
+    if (e.splash && e.kind !== 'pull' && e.dirMode === 'preset') {
+      var es = e.effSrc || e.src;
+      if (es && es.x != null && es.y != null) {
+        var sdx = cfg.start.x - es.x, sdy = cfg.start.y - es.y;
+        var d2 = sdx * sdx + sdy * sdy;
+        var sL = Math.hypot(sdx, sdy) || 1e-12;
+        var rad = { x: sdx / sL, y: sdy / sL };              // 径向：效果源 → 敌人起点
+        if (d2 < K.tooCloseSqr || quant4(dir.x, dir.y) !== quant4(rad.x, rad.y)) {
+          var dec = (e.decreaseLevel == null) ? 2 : e.decreaseLevel;
+          var nidx = K.zeroIndex + ((e.forceLevel - dec) - e.massLevel);
+          var nfv = (nidx >= 0 && nidx < K.pushForces.length) ? K.pushForces[nidx] * 0.01 : 0;
+          if (nfv === 0) { e._dead = true; deadN++; e._err = '溅射降级后力度为 0'; continue; }
+          idx = nidx; fv = nfv;
+          dir = rad;                                        // ★ 方向改为径向
+          e._splashHit = true;
+        }
+      }
+    }
+    e._idx = idx; e._forceVal = fv; e._dir = dir;
+    e._hit = e.hitFrame;
+    e._fixedDir = (e.kind === 'pull' && e.dirMode === 'preset' && e.dir) ? e.dir : null;   // ★ preset 模式固定方向
+    if (e.kind === 'pull') {
+      e._gate = (e.gate != null) ? e.gate : (e._hit + 1);
+      e._expireF = (e.duration > 0) ? (e._hit + e.duration) : Infinity;
+      e._pullEnd = e.pullEnd || 999;
+      e._endFrame = Math.min(e._expireF, e._pullEnd);
+      e._lastEffect = e._endFrame;
+    } else {
+      e._gate = null;
+      e._lastEffect = (e.kind === 'pushDirect') ? (e._hit + 1) : e._hit;
+    }
+  }
+  if (events.length && deadN === events.length) {
+    return { idx: -1, err: events.map(function (x) { return '事件#' + x.sourceId + '：' + x._err; }).join('；'), frames: [] };
+  }
+
+  /* ── 拉源集合（★ 只有拉力登记源；推不登记）── */
+  var sources = [];
+  for (ei = 0; ei < events.length; ei++) {
+    var e2 = events[ei];
+    if (e2._dead || e2.kind !== 'pull') continue;
+    sources.push({
+      id: e2.sourceId,
+      beginFrame: e2._gate,
+      endFrame: e2._endFrame,
+      expireF: e2._expireF,
+      stopAtExpire: (e2.duration > 0 && e2._expireF <= e2._pullEnd),
+      expireStop: (e2.expireStop !== false),
+      ev: e2,
+      registered: false, unregistered: false, disabled: false,
+      force: { x: 0, y: 0 }
+    });
+  }
+  function activePullSources(kk) {
+    var out = [];
+    for (var j = 0; j < sources.length; j++) {
+      var s = sources[j];
+      if (!s.disabled && !s.unregistered && kk >= s.beginFrame && kk <= s.endFrame) out.push(s);
+    }
+    return out;
+  }
+  function hasFuture(kk) {
+    for (var j = 0; j < events.length; j++) {
+      var e3 = events[j];
+      if (!e3._dead && e3._lastEffect >= kk) return true;
+    }
+    return false;
+  }
+
+  /* ── 失衡状态机（含重入）：进入 = 任一力事件施力；退出 = §3 判据链 ── */
+  var isUnbalanced = false;
+  var protectUntil = 0;
+  function refreshProtect(f) { protectUntil = Math.max(protectUntil, f + K.protectFrames - 1); }
+
+  var pullAccum = { x: 0, y: 0 };
+  var totalDistById = {};
+  var stopMarked = {};        // 每源只标记一次
+  var stopArmed = false;
+
+  for (k = 1; k <= maxF; k++) {
+    var x0 = st.x, y0 = st.y;
+    var note = '';
+    var wasUnbalanced = isUnbalanced;
+
+    // ① 帧首：装载力槽（= 上一帧协程段各拉源写入之和）+ 取在册源数（= 本帧 OnTick 读到的 m_pullSources.Count）
+    st.fx = pullAccum.x; st.fy = pullAccum.y;
+    pullAccum.x = 0; pullAccum.y = 0;
+    var actStart = activePullSources(k);
+    var srcAtStart = actStart.length;
+
+    // ② OnTick（仅失衡帧）：线性摩擦 + 退出判定（③ 摩擦优先 → ④ 源兜底）
+    if (wasUnbalanced) {
+      var sp = Math.hypot(st.vx, st.vy);
+      var dec = K.grav * K.mass * K.fricFactor * (cfg.frictionFactor == null ? 1 : cfg.frictionFactor) * K.dt;
+      var ns = Math.max(0, sp - dec);
+      if (sp > 1e-12) { st.vx = st.vx / sp * ns; st.vy = st.vy / sp * ns; }
+      var frictionAlive = (ns > K.minSpd) || (k <= protectUntil);   // ← _UpdateFriction() 的返回值
+      var srcCount = srcAtStart;                                    // ← m_pullSources.Count（帧首在册数）
+      if (!(frictionAlive || srcCount > 0)) {
+        st.vx = 0; st.vy = 0;                                       // OnExit ⇒ _ResetPhysicsStatus（清速度）
+        isUnbalanced = false;
+        frames.push({ k: k, x0: x0, y0: y0, x1: st.x, y1: st.y, v: 0,
+          ch: 'EXIT', mu: 0, state: '非失衡', note: note,
+          srcCount: 0, activeSources: [], protectUntil: protectUntil,
+          netForce: { x: st.fx, y: st.fy }, stopRadiusArmed: stopArmed,
+          log: [{ t: 'OnTick ⇒ 退出',
+            d: '摩擦后 |v|=' + ns.toFixed(6) + ' ≤ ' + K.minSpd + ' 且硬直窗已过（保护至 k=' + protectUntil +
+               '）、在册拉动源数=' + srcCount + ' ⇒ OnExit 关箱，残差冻结' }] });
+        if (!hasFuture(k)) break;                                   // 无后续事件 ⇒ 结束（旧单事件行为）
+        continue;                                                   // 仍有未来事件 ⇒ 静止等待重入
+      }
+    }
+
+    // ③ pushProj：OnTick 之后施冲量（命中帧即失衡 + 刷硬直窗；该帧物理步即成位移）
+    for (ei = 0; ei < events.length; ei++) {
+      var ep = events[ei];
+      if (ep._dead || ep.kind !== 'pushProj' || ep._hit !== k) continue;
+      st.vx = ep._dir.x * ep._forceVal;
+      st.vy = ep._dir.y * ep._forceVal;
+      isUnbalanced = true;
+      refreshProtect(k);
+    }
+
+    // ④ 物理步（★ 仅失衡帧；非失衡帧整段跳过 ⇒ 位置不变）
+    var chs = [], allLog = [];
+    var doPhysics = isUnbalanced;
+    var consumed = (st.fx !== 0 || st.fy !== 0);
+    if (doPhysics && consumed) {
+      allLog.push({ t: '· 力累加器消费',
+        d: '本帧物理步消费上一帧（k=' + (k - 1) + '）协程阶段施入的力 F=(' + st.fx.toFixed(3) + ',' + st.fy.toFixed(3) +
+           ') ⇒ 本帧积分为速度（「只写力累加器、下一次物理步才成速度」）' });
+    }
+    var stepsPerFrame = cfg.stepsPerFrame || 1;
+    var muSum = 0;
+    if (!doPhysics) {
+      allLog.push({ t: '· 物理步跳过',
+        d: '本帧敌人【非失衡】⇒ 不参与物理模拟（自主移动为写位置而非给速度，v ≡ 0，摩擦无从下手）；不碰撞求解、不积分、位置不变' });
+    }
+    for (var sIdx = 0; doPhysics && sIdx < stepsPerFrame; sIdx++) {
+      var r2 = step(st, cfg);
+      chs.push(r2.ch); allLog = allLog.concat(r2.log); muSum += (r2.mu || 0);
+    }
+
+    // ⑤ 帧末 (d) ★ 急停（两条判据；★ 修订：A = 距【拉力终点 src】≤0.05、B = 距【效果源=施力者中心】≤0.6708）
+    //   机制：拉拽协程主循环里 CheckDistance(敌.mapPosition, m_pullBackDestination, 0.05) ∨
+    //           BattleUtil.CheckTargetWithinBlockRange(敌, 施力者, shrink=0.05)（后者 = 距施力者中心 ≤ √(blockRadiusSquare − 0.05)）
+    //   ⇒ 任一命中：本帧力归零（xorps）、TryEarlyStopPull 清速度一次（仅 Count==1 且本源）；★ 不 EndPull（该源仍在册）
+    var stopHit = null;
+    for (ei = 0; ei < sources.length; ei++) {
+      var s3 = sources[ei];
+      if (s3.disabled || s3.unregistered || !s3.ev.src) continue;
+      if (k < s3.beginFrame || k > s3.endFrame) continue;
+      var es3 = s3.ev.effSrc || s3.ev.src;
+      var dA = Math.hypot(st.x - s3.ev.src.x, st.y - s3.ev.src.y);      // 判据 A：距【拉力终点 = 力源 src】
+      var dB = Math.hypot(st.x - es3.x, st.y - es3.y);                  // 判据 B：距【效果源 = 施力者(干员)中心】
+      var bR = (s3.ev.blockRadius == null) ? K.blockRadius : s3.ev.blockRadius;   // 地面 0.6708 / 空中 0.86601（可 per-event 覆盖）
+      var hitA = (dA < K.stopRadius), hitB = (dB < bR);
+      s3.forceZero = (hitA || hitB);            // ★ 命中 ⇒ 本帧 (a) 把力归零（对齐二进制 xorps）
+      if (!s3.forceZero || stopMarked[s3.id]) continue;
+      stopMarked[s3.id] = true;
+      stopArmed = true;
+      var list3 = activePullSources(k);
+      var alone3 = (list3.length === 1 && list3[0].id === s3.id);
+      var cleared3 = false;
+      if (alone3) { st.vx = 0; st.vy = 0; cleared3 = true; }   // TryEarlyStopPull: Count==1 且为本源 ⇒ set_velocity(Vector2.zero)
+      var via3 = (hitA && hitB) ? 'A+B' : (hitA ? 'A' : 'B');
+      stopHit = { hit: true, id: s3.id, via: via3, cleared: cleared3,
+                  dist: (via3 === 'B') ? dB : dA, radius: (via3 === 'B') ? bR : K.stopRadius,
+                  distA: dA, distB: dB, radiusA: K.stopRadius, radiusB: bR };
+      allLog.push({ t: '★ 进入急停（判据 ' + via3 + '）',
+        d: '判据 A 距拉力终点 distA=' + dA.toFixed(4) + '（≤' + K.stopRadius + ' ? ' + hitA + '）；判据 B 距效果源（施力者中心）distB=' +
+           dB.toFixed(4) + '（≤' + bR + ' ? ' + hitB + '）（源 #' + s3.id + '）⇒ TryEarlyStopPull' +
+           (alone3 ? '【在册源数==' + list3.length + ' 且为本源 ⇒ set_velocity(Vector2.zero) 清零速度】'
+                   : '【在册源数==' + list3.length + ' ⇒ 多源共存，不清速度】') +
+           '；★ 只清速度、**不 EndPull** ⇒ 该源仍在册 ⇒ 失衡持续到拉力正常结束；★ 命中后每帧把力归零（对齐二进制 xorps）' });
+    }
+
+    // ⑤ 帧末 (c) 拉力终点（★ 修正：本块移到 (a) 之前）
+    //   二进制：主循环入口 LE(剩余,0) 命中 ⇒ TryEarlyStopPull + EndPull + return false（该迭代不再 StillPull）
+    //   ⇒ 到期帧【该源不施力】—— 靠先注销让 (a) 直接跳过
+    for (ei = 0; ei < sources.length; ei++) {
+      var s2 = sources[ei];
+      if (s2.disabled || s2.unregistered) continue;
+      if (k !== s2.endFrame) continue;
+      var list = activePullSources(k);
+      var alone = (list.length === 1 && list[0].id === s2.id);
+      if (s2.stopAtExpire && s2.expireStop && alone) { st.vx = 0; st.vy = 0; }
+      s2.unregistered = true;
+      allLog.push({ t: '★ 拉力终止（' + (s2.stopAtExpire ? '时长到点' : '对照截断') + '）',
+        d: (s2.stopAtExpire
+              ? '剩余时间归 0 ⇒ 协程主循环入口 LE 判定 ⇒ TryEarlyStopPull' +
+                (alone ? '【Count==1 且为本源 ⇒ 清速度】' : '【多源共存 ⇒ 不清速度】') +
+                (s2.expireStop ? '' : '（对照开关 pexp=none：未清速度）')
+              : '对照截断帧 pullEnd=' + s2.endFrame + ' ⇒ 直接 EndPull（不动速度）')
+          + ' + EndPull（接口槽 218）⇒ 注销该源；余下在册源数=' + activePullSources(k).length +
+            '；★ 本帧该源不再施力（对齐二进制：到期迭代不 StillPull）' });
+    }
+
+    // ⑤ 帧末 (a) 逐拉源：BeginPull（gate 帧）/ StillPull（★ 力被上方 (c)/(d) 归零则不施）
+    for (ei = 0; ei < sources.length; ei++) {
+      var src = sources[ei];
+      if (src.disabled || src.unregistered) continue;
+      if (k < src.beginFrame || k > src.endFrame) continue;
+      var ev = src.ev;
+      var prj = ev.prj || ev.src;
+      var dist2 = Math.hypot(prj.x - st.x, prj.y - st.y) || 1e-9;
+      var dxo = ev.src.x - st.x, dyo = ev.src.y - st.y;
+      var Lo = Math.hypot(dxo, dyo) || 1e-9;
+      if (totalDistById[src.id] == null) {
+        totalDistById[src.id] = (ev.totalDistance == null || !isFinite(ev.totalDistance)) ? dist2 : ev.totalDistance;
+      }
+      var f2 = ev._forceVal;
+      if (ev.decay) { var rr = Math.min(1, dist2 / totalDistById[src.id]); f2 = ev._forceVal * rr * rr * rr * rr; }
+      if (src.forceZero) f2 = 0;                             // ★ 急停半径内 ⇒ 力归零（对齐二进制 xorps）
+      var ffx, ffy;
+      if (ev._fixedDir) {                                   // ★ 对照：方向模式 = 预设（固定角）
+        ffx = ev._fixedDir.x * f2; ffy = ev._fixedDir.y * f2;
+      } else {                                              // 游戏行为：力的方向 = 指向力源
+        ffx = dxo / Lo * f2; ffy = dyo / Lo * f2;
+      }
+      pullAccum.x += ffx; pullAccum.y += ffy;
+      src.force = { x: ffx, y: ffy };
+      if (k === src.beginFrame) {
+        src.registered = true;
+        isUnbalanced = true;
+        refreshProtect(k);
+        allLog.push({ t: '★ BeginPull（协程阶段 · 物理步之后）',
+          d: 'AddForce(−dir×' + f2.toFixed(3) + ', ForceMode2D.Force) ⇒ 只写【力累加器】⇒ 本份力【不被消费】，等 k=' + (k + 1) +
+             ' 物理步才积分成速度；随后 UpdateUnbalanceProtectTime()（硬直窗 = fixedPlayTime + 0.1s）+ SwitchState(UNBALANCE=9)' +
+             ' ⇒ 敌人【此刻】才失衡（k=' + k + ' 全帧至此仍是非失衡） + OnMakeEnemyUnbalanced()' });
+      } else {
+        allLog.push({ t: '· StillPull（协程推进 · 物理步之后）',
+          d: 'AddForce(−dir×' + f2.toFixed(3) + ')' +
+             (src.forceZero ? ' ⇒ ★ 急停半径内，力已归零（对齐二进制 xorps；清速度仅一次）' : ' ⇒ 同样只写力累加器（★ StillPull 不刷新硬直窗）') +
+             '；衰减系数 = ' + (ev.decay ? Math.pow(Math.min(1, dist2 / totalDistById[src.id]), 4).toFixed(4) : '1（未启用）') });
+      }
+    }
+
+    // ⑤ 帧末 (b) pushDirect：本帧末施冲量 ⇒ 次帧生效（且先经线性摩擦）+ 登记失衡 + 刷硬直窗
+    for (ei = 0; ei < events.length; ei++) {
+      var ed = events[ei];
+      if (ed._dead || ed.kind !== 'pushDirect' || ed._hit !== k) continue;
+      st.vx = ed._dir.x * ed._forceVal;
+      st.vy = ed._dir.y * ed._forceVal;
+      isUnbalanced = true;
+      refreshProtect(k);
+      allLog.push({ t: '· 非弹道推（协程阶段 · 物理步之后）',
+        d: 'AddForce(impulse=' + ed._forceVal.toFixed(3) + ', ForceMode2D.Impulse) ⇒ 立即写 velocity；本帧物理步已过 ⇒ 位移从 k=' +
+           (k + 1) + ' 起（且该帧先经 OnTick 线性摩擦）；★ KnockBack 不登记 pull 源 ⇒ 不延长失衡' });
+    }
+
+    // ⑥ 记录帧（旧 9 字段语义不变；新增字段只增不改）
+    var fr = { k: k, x0: x0, y0: y0, x1: st.x, y1: st.y, v: Math.hypot(st.vx, st.vy),
+      ch: chs.join('+'), mu: muSum, state: (doPhysics ? '失衡' : '非失衡'), log: allLog, note: note };
+    fr.srcCount = srcAtStart;
+    fr.activeSources = actStart.map(function (s) { return { id: s.id, force: { x: s.force.x, y: s.force.y } }; });
+    fr.protectUntil = protectUntil;
+    fr.netForce = { x: st.fx, y: st.fy };
+    fr.stopRadiusArmed = stopArmed;
+    if (stopHit) fr.stopRadius = stopHit;
+    frames.push(fr);
+  }
+
+  var first = null;
+  for (ei = 0; ei < events.length; ei++) if (!events[ei]._dead) { first = events[ei]; break; }
+  return {
+    idx: first ? first._idx : -1,
+    forceVal: first ? first._forceVal : null,
+    dir: first ? first._dir : null,
+    events: events,
+    sources: sources,
+    frames: frames,
+    end: { x: st.x, y: st.y }
+  };
+}
+
+/* ---------- 内置标定用例 ---------- */
+var CASES = [
+  { name:'测试5 · 墙心(5,4) 1级力向左', axis:'x',
+    cfg:{walls:[[5,4],[5,2],[6,2]], start:{x:5,y:4}, mode:'pushProj', forceLevel:1, massLevel:3,
+         dir:{x:-1,y:0}, continuous:true, maxFrames:10, stunned:true},
+    expect:[5.446403, 5.563425, 5.604990, 5.604993, 5.604993] },
+  { name:'测试4 · (5,3.5) 1级力横向', axis:'y',
+    cfg:{walls:[[5,4],[5,2]], start:{x:5,y:3.5}, mode:'pushProj', forceLevel:1, massLevel:3,
+         dir:{x:-1,y:0}, continuous:true, maxFrames:12, stunned:true},
+    expect:[3.395410, 3.395328, 3.395262, 3.395210, 3.395168, 3.395134, 3.395134] },
+  { name:'测试1 · (5,3) 2级力向下', axis:'y',
+    cfg:{walls:[[5,4],[5,2]], start:{x:5,y:3}, mode:'pushProj', forceLevel:2, massLevel:3,
+         dir:{x:0,y:-1}, continuous:true, maxFrames:10, stunned:true},
+    expect:[2.933333, 2.872117, 2.816350, 2.804375, 2.804375] },
+  { name:'测试2 · (5,3) 2级力向上', axis:'y',
+    cfg:{walls:[[5,4],[5,2]], start:{x:5,y:3}, mode:'pushProj', forceLevel:2, massLevel:3,
+         dir:{x:0,y:1}, continuous:true, maxFrames:15, stunned:true},
+    expect:[3.066667, 3.127883, 3.183650, 3.233967, 3.278833, 3.318250, 3.352217, 3.380733, 3.403800, 3.395550, 3.395550] },
+  { name:'沿缝 (5.5,2.52) 2级力下推（实测）', axis:'x',
+    cfg:{walls:[[5,4],[5,2],[6,2]], start:{x:5.5,y:2.52}, mode:'pushProj', forceLevel:2, massLevel:3,
+         dir:{x:0,y:-1}, continuous:true, maxFrames:14, stunned:true},
+    expect:[5.478535,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353] },
+  /* ★ 第 7 套标定（实测）：墙缝【偏左】下推、1 级力。
+     判别点：起点只与墙(5,2)接触，被常规 Solve 挤出后撞进墙(6,2) ⇒ 靠
+     「常规 Solve 之后用 c0→c 全位移重扫全部 contact」触发 TOI，再两墙 0.75 迭代到
+     不动点 5.407353（= 0.105·E/(2−E)，E=k(2−k)，k=0.75）。
+     ★ 改前模型给 5.544349/5.592647（缺这段 SolveTOI 重扫）⇒ 本用例专门守这个回归。 */
+  { name:'测试7 · 墙缝偏左(5.373633,2.52) 1级力下推（实测）', axis:'x',
+    cfg:{walls:[[5,4],[5,2],[6,2]], start:{x:5.373633,y:2.52}, mode:'pushProj', forceLevel:1, massLevel:3,
+         dir:{x:0,y:-1}, continuous:true, maxFrames:10, stunned:true},
+    expect:[5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353] },
+  /* ★ 第 8 套标定（实测）：墙缝【偏右】下推、2 级力。
+     ★ 本用例是 测试7 的【镜像】：同一对墙格 (5,2)/(6,2)、同一道缝 x=5.5，但起点在缝的【右】侧
+     ⇒ 落点 = 5.5 + u* = 5.592647（测试7 是 5.5 − u* = 5.407353）。
+     ★ 它钉死的是【落点选择规则】：引擎 = 「起点同侧的不动点」；**不是**固定接触顺序所致。
+     证据：tile 序满足测试7 但测试8 错 −0.185294；逆 tile 序满足测试8 但测试7 错 +0.185294；
+           深者先（sep 升序）两组同时命中 ⇒ 有效处理序是【几何的：更深/同侧者先】。
+     ⚠ y 轴同时命中（纯摩擦 0.1635/帧、帧 13 退出），故本用例只断言 x。 */
+  { name:'测试8 · 墙缝偏右(5.59125,2.52) 2级力下推（实测）', axis:'x',
+    cfg:{walls:[[5,4],[5,2],[6,2]], start:{x:5.59125,y:2.52}, mode:'pushProj', forceLevel:2, massLevel:3,
+         dir:{x:0,y:-1}, continuous:true, maxFrames:14, stunned:true},
+    expect:[5.592647,5.592647,5.592647,5.592647,5.592647,5.592647,5.592647,5.592647,5.592647,5.592647,5.592647,5.592647,5.592647] },
+  // ★ ：时序改为「施力帧 / 积分帧」分离 ⇒ 首次位移落在 k=4。
+  //   k=1 命中建链接（非失衡，不动）/ k=2 敌人先不失衡、走完 OnTick+物理步，
+  //   之后协程阶段 BeginPull 第一次施力 + 切失衡 / k=3 已是失衡态 ⇒ 物理步积分 ⇒ 首次位移。
+  { name:'测试3 · 拉力 源(5,5.5) 敌(5,3)', axis:'y',
+    cfg:{walls:[[5,4]], start:{x:5,y:3}, mode:'pull', forceLevel:2, massLevel:3,
+         src:{x:5,y:5.5}, totalDistance:2.5, decay:true, pullStart:2, continuous:true, maxFrames:20},
+    expect:[3.011111, 3.027687, 3.049440, 3.076001, 3.106932, 3.141742, 3.179889, 3.220849, 3.264023, 3.308857, 3.354779] },
+  // ★ 逐帧事件序（时序回归闸）：钉死 k=1/2 非失衡且静止、k=2 协程阶段 BeginPull 施力、
+  //   k=3 已是失衡态且首次位移。口径 = 用户 口述（命中帧记为 1）。
+  { name:'拉力事件序 · 命中/施力/失衡三帧分离（k=1..3）', axis:'y',
+    cfg:{walls:[[5,4]], start:{x:5,y:3}, mode:'pull', forceLevel:2, massLevel:3,
+         src:{x:5,y:5.5}, totalDistance:2.5, decay:true, pullStart:2, continuous:true, maxFrames:6},
+    check:function(r){
+      var f = r.frames, g = 2;                       // 施力帧 = 2
+      var okState12 = f[0].state === '非失衡' && f[1].state === '非失衡';
+      var okState3  = f[2].state === '失衡';
+      var okNoMove  = Math.abs(f[0].y1-f[0].y0) < 1e-12 && Math.abs(f[1].y1-f[1].y0) < 1e-12;
+      var okFirstDisp = Math.abs(f[2].y1-f[2].y0) > 1e-6;
+      var okBegin    = (f[1].log||[]).some(function(l){ return /BeginPull/.test(l.t); });
+      var okNoForce  = !(f[1].log||[]).some(function(l){ return /力累加器消费/.test(l.t); });
+      var okConsumed = (f[2].log||[]).some(function(l){ return /力累加器消费/.test(l.t); });
+      // ★ 非失衡帧必须【跳过物理步】（物理步只处理失衡单位）
+      var okSkipPhys = (f[0].log||[]).some(function(l){ return /物理步跳过/.test(l.t); })
+                    && (f[1].log||[]).some(function(l){ return /物理步跳过/.test(l.t); })
+                    && !(f[2].log||[]).some(function(l){ return /物理步跳过/.test(l.t); });
+      return {pass: okState12 && okState3 && okNoMove && okFirstDisp && okBegin && okNoForce && okConsumed && okSkipPhys,
+        info:'k1/k2 态='+f[0].state+'/'+f[1].state+'（期望全非失衡）；k3 态='+f[2].state+'（期望失衡）'
+           + '；k1/k2 位移='+(f[0].y1-f[0].y0).toFixed(6)+'/'+(f[1].y1-f[1].y0).toFixed(6)+'（期望全 0）'
+           + '；k3 首次位移='+(f[2].y1-f[2].y0).toFixed(6)+'（期望 >0）'
+           + '；k2 有 BeginPull='+okBegin+'、k2 无消费='+okNoForce+'、k3 有消费='+okConsumed
+           + '；k1/k2 跳过物理步='+okSkipPhys};
+    } },
+  // ★ 修正：锚点 = 命中帧（第 1 帧）⇒ 收尾帧 = 1 + N；实机"测试3"（1 s ⇒ N=30）标定
+  { name:'拉力时长 · 0.5s 到点急停（行为断言）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3}, mode:'pull', forceLevel:2, massLevel:3,
+         src:{x:5,y:5.5}, totalDistance:2.5, decay:true, pullStart:2, continuous:true,
+         pullDuration:0.5, pullExpireStop:'stop', maxFrames:30},
+    check:function(r){
+      var N = Math.round(0.5 / (1/30));            // = 15 帧
+      var g = 2, exp = 1 + N;                      // 施力帧 = 2；锚 = 命中帧 ⇒ 第 16 帧收尾
+      // ★ ：施力窗口 = g…exp（含收尾帧），但力滞后一帧生效（g+1 起才有速度）
+      var lastF = r.frames[exp-2] || {}, expF = r.frames[exp-1] || {};
+      var okForce = (lastF.v > 0.1);               // 收尾前一帧仍有速度
+      var okForceAtExp = (expF.y1 > lastF.y1);     // ★ h+N 那一帧【有力】⇒ 该帧仍在向上位移
+      var okStop  = (expF.v === 0);                // 该帧末速度被清 0（TryEarlyStopPull，物理步之后）
+      var okEnd   = (r.frames.length === exp + 1); // 到点后下一帧即退出失衡
+      var okState = (r.frames[r.frames.length-1].state === '非失衡');  // 只区分 失衡/非失衡
+      var okLag   = Math.abs((r.frames[g-1].y1 - r.frames[g-1].y0)) < 1e-12   // k=g 施力帧：本帧不动
+                    && (r.frames[g].y1 - r.frames[g].y0) > 1e-9;              // k=g+1 才首次位移
+      return {pass: okForce && okForceAtExp && okStop && okEnd && okState && okLag,
+        info:'施力帧 '+g+'…'+exp+'（含收尾帧；力滞后一帧生效：k='+(g+1)+' 首次位移）'
+           +'；f'+(exp-1)+'.y='+lastF.y1.toFixed(6)+
+             ' ⇒ f'+exp+'.y='+expF.y1.toFixed(6)+'（仍在动 ⇒ 该帧有力）；f'+exp+'.|v|='+expF.v.toFixed(4)+
+             '；总帧数 '+r.frames.length+'（期望 '+(exp+1)+'），末帧态 '+r.frames[r.frames.length-1].state};
+    } },
+  // ★ 「测试9」整段标定（实测 32 帧逐帧 y/x）：墙缝(5,2)/(6,2) 内的 2 级拉力。
+  //   真实力 = 满额 10 N（`totalDistance` 就是那一刻的距离 ⇒ 首次施力 att ≡ 1），**赤字来自接触切向摩擦**：
+  //   拉力方向斜（−0.4402,−0.8979），x 分量被缝（法向 ±x）吃掉 ⇒ 法向冲量 Pn = |v_x|，
+  //   摩擦上限 = μ·Pn 按比例吃掉**切向（竖直）速度** ⇒ 每帧少 0.4·0.4402·F/30 ≈ 0.176·F/30 ≈ 力表观少 20%。
+  //   ⇒ 加摩擦后 μ = 0.400（细扫：0.399/0.401 的误差差 7 倍）时，全 32 帧 max|Δy| = 3.9e-5（多数帧 1e-6）。
+  //   ⚠ 旧结论（"把 totalDistance 手填 1.195"）是**混叠**：它把"每帧少 17.6% 的力"错误归到分母上（误差 0.004，且首帧就对不上）。
+  //   本用例同时钉死：μ=0.4 的摩擦、满额首力、时长锚点（1.0 s ⇒ N=30 ⇒ 第 31 帧仍有力、第 32 帧退出）。
+  { name:'测试9 · 缝内 2 级拉力（斜拉 ⇒ 切向摩擦 μ=0.4）', axis:'y',
+    cfg:{walls:[[5,4],[5,2],[6,2]], start:{x:5.5,y:2.52}, mode:'pull', forceLevel:2, massLevel:3,
+         src:{x:5,y:1.5}, decay:true, pullStart:2, continuous:true, mu:0.4,
+         pullDuration:1.0, pullExpireStop:'stop', maxFrames:32},
+    expectX:[5.5,5.5,5.478553,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,
+             5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,
+             5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,5.407353,
+             5.407353,5.407353],
+    expectY:[2.52,2.52,2.511980,2.501729,2.489849,2.476653,2.462473,2.447652,2.432535,2.417416,
+             2.402734,2.388667,2.375526,2.363553,2.352961,2.343929,2.336609,2.331117,2.327539,2.324059,
+             2.320632,2.317258,2.313933,2.310658,2.307430,2.304249,2.301114,2.298022,2.294974,2.291968,
+             2.289003,2.289003],
+    check:function(r){
+      var TOL = 1e-4, TOLX = 5e-4;      // 摩擦加对后可达 1e-5 级
+      var mx = 0, my = 0, kx = -1, ky = -1;
+      for (var k=3;k<=32;k++){
+        var f = r.frames[k-1]; if (!f) break;
+        var dx = Math.abs(f.x1 - this.expectX[k-1]), dy = Math.abs(f.y1 - this.expectY[k-1]);
+        if (dx > mx){ mx = dx; kx = k; } if (dy > my){ my = dy; ky = k; }
+      }
+      var last = r.frames[r.frames.length-1], c = this.cfg;
+      var TDauto = Math.hypot(c.src.x-c.start.x, c.src.y-c.start.y);
+      var okX = mx <= TOLX, okY = my <= TOL, okN = (r.frames.length === 32),
+          okStop = (r.frames[30].v === 0),                       // 第 31 帧末清速度（TryEarlyStopPull）
+          okEnd = (last.state === '非失衡');                      // 第 32 帧退出失衡
+      return {pass: okX && okY && okN && okStop && okEnd,
+        info:'μ='+c.mu+'；TD 取自动(|源−敌|)='+TDauto.toFixed(5)+'（首帧 att≡1 ⇒ 首力 = 满额 10 N）'
+           + '；max|Δx|='+mx.toExponential(2)+'(k='+kx+') max|Δy|='+my.toExponential(2)+'(k='+ky+')'
+           + '（容差 '+TOLX+' / '+TOL+'）'
+           + '；帧数 '+r.frames.length+'（期望 32），第 31 帧仍有力（v='+r.frames[30].v.toFixed(4)+'）⇒ 第 32 帧 '+last.state};
+    } },
+  // ★ 「测试10」（急停判例）：敌人 (3,3) 被 2 级力（对 2 重敌）拉向力源 (3,5.5)、
+  //   效果源（干员）在 (3,6)、开衰减、1.0 s = 30 帧到点。k=18 y=5.32072（A 假、B 假：距施力者 0.67928 > 0.6708）
+  //   ⇒ k=19 y=5.458185 时 A（距终点 0.0418 ≤ 0.05）与 B（距施力者 0.5418 ≤ 0.6708）**同帧首次为真** ⇒ 急停
+  //   ⇒ TryEarlyStopPull 清零速度 ⇒ 冻结（|v|=0、位置不动），直到拉力到点（k=31）后 k=32 退出失衡。
+  //   ★ 逐帧对拍 k=1..32 全部 ≤2.7e-6。
+  { name:'测试10 · 急停判据 A/B（k=19 两判据同帧首次为真 ⇒ 冻结；2级力/2重敌）', axis:'y',
+    cfg:{walls:[], start:{x:3,y:3}, maxFrames:32,
+         forces:[{kind:'pull', hitFrame:1, forceLevel:2, massLevel:2, src:{x:3,y:5.5}, effSrc:{x:3,y:6},
+                  duration:30, decay:true, expireStop:true}]},
+    expectY:[3,3,3.04444,3.124806,3.235929,3.371499,3.524973,3.690308,3.862397,4.037218,
+      4.211799,4.384062,4.55264,4.716685,4.875709,5.029454,5.177806,5.32072,5.458185,
+      5.458185,5.458185,5.458185,5.458185,5.458185,5.458185,5.458185,5.458185,5.458185,5.458185,5.458185,5.458185,5.458185],
+    check:function(r){
+      var TOL = 1e-4;                 // 模型偏差 ~3e-6
+      var my = 0, ky = -1;
+      for (var k=1;k<=32;k++){        // ★ 全帧逐帧比（k=2 笔误已订正为 3.0）
+        var f = r.frames[k-1]; if (!f) break;
+        var dy = Math.abs(f.y1 - this.expectY[k-1]);
+        if (dy > my){ my = dy; ky = k; }
+      }
+      var stopIdx = -1;
+      for (var i=0;i<r.frames.length;i++) if (r.frames[i].stopRadius && r.frames[i].stopRadius.hit){ stopIdx = i; break; }
+      var frozen = stopIdx >= 0 && r.frames.slice(stopIdx).every(function(f){ return Math.abs(f.y1 - r.frames[stopIdx].y1) < 1e-9; });
+      var last = r.frames[r.frames.length-1];
+      var okY = my <= TOL, okN = (r.frames.length === 32),
+          okStop = stopIdx >= 0 && r.frames[stopIdx].stopRadius.cleared,
+          okEnd = (last.state === '非失衡');
+      return {pass: !!(okY && okN && okStop && okEnd && frozen),
+        info:'max|Δy|(k=1..32)='+my.toExponential(2)+'(k='+ky+')（容差 '+TOL+'）'
+           + '；急停帧 k='+(stopIdx>=0?'#'+r.frames[stopIdx].k+'（判据 '+r.frames[stopIdx].stopRadius.via+
+               '；distA='+r.frames[stopIdx].stopRadius.distA.toFixed(4)+' ≤ '+r.frames[stopIdx].stopRadius.radiusA+
+               '；distB='+r.frames[stopIdx].stopRadius.distB.toFixed(4)+' ≤ '+r.frames[stopIdx].stopRadius.radiusB+
+               '，cleared='+r.frames[stopIdx].stopRadius.cleared+'）':'—')
+           + '；急停后冻结='+frozen+'；帧数 '+r.frames.length+'（期望 32）、末帧 '+last.state};
+    } },
+  // ★ 回归：效果源 ≠ 力源 ⇒ 进判据 B 的圈时离力源（= 拉力终点）仍远 ⇒ 急停必须【把力归零】后才冻结
+  //   （旧模型只在帧末清速度、不置零力 ⇒ 该帧力会在次帧被积分 ⇒ 敌人蠕动；已修正）
+  { name:'测试11 · 判据 B 急停半径（效果源(3,4.5)≠力源(3,5.5) ⇒ 进 B 圈时离拉力终点仍远、靠力归零才冻结）', axis:'y',
+    cfg:{walls:[], start:{x:3,y:3}, maxFrames:32,
+         forces:[{kind:'pull', hitFrame:1, forceLevel:2, massLevel:2, src:{x:3,y:5.5}, effSrc:{x:3,y:4.5},
+                  duration:30, decay:true, expireStop:true}]},
+    check:function(r){
+      var si = -1;
+      for (var i=0;i<r.frames.length;i++) if (r.frames[i].stopRadius && r.frames[i].stopRadius.hit){ si=i; break; }
+      var frozen = si>=0 && r.frames.slice(si).every(function(f){ return Math.abs(f.y1 - r.frames[si].y1) < 1e-9; });
+      var f0 = (si>=0 && si+1<r.frames.length) ? r.frames[si+1].netForce.y : NaN;   // 急停帧施入、次帧消费的力
+      var zeroF = Math.abs(f0) < 1e-9;
+      return {pass: !!(si>=0 && frozen && zeroF),
+        info:'急停帧 k='+(si>=0?'#'+r.frames[si].k+'（判据 '+r.frames[si].stopRadius.via+'：distB='+r.frames[si].stopRadius.distB.toFixed(4)+' < '+r.frames[si].stopRadius.radiusB+' / distA='+r.frames[si].stopRadius.distA.toFixed(4)+'）':'—')
+           + '；急停后冻结=' + frozen + '；急停帧施入力=' + (isFinite(f0)?f0.toExponential(2):'—') + '（须 0）'};
+    } },
+  /* ══════════════════════════════════════════════════════════════════════
+     ★ 新增：施力序列 / 多源退出
+     依据：多源 ListSet 语义、退出判据链、推/拉时序。
+     ⚠ 全部为【行为断言】(check)：暂无实机「多源 / 推拉共存」读数，待实测后升级为数值断言。
+     ══════════════════════════════════════════════════════════════════════ */
+  // 1) 双拉源同帧：力矢量相加；★ 退出由「在册源数」决定 —— 一源结束仍不失衡，两源都结束才退
+  { name:'序列1 · 双拉源叠加（源1 到点后仍不失衡，两源都结束才退）', axis:'x',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:30,
+         forces:[
+           {kind:'pull', hitFrame:1, forceLevel:2, massLevel:3, src:{x:5,y:5.5},   duration:10, decay:false},
+           {kind:'pull', hitFrame:1, forceLevel:2, massLevel:3, src:{x:6.5,y:3},  duration:20, decay:false}
+         ]},
+    check:function(r){
+      var f3 = r.frames[2];                                   // k=3：首个消费力的帧（力 = 帧2 末两源之和）
+      var okNet = !!f3 && Math.abs(f3.netForce.x - 10) < 1e-6 && Math.abs(f3.netForce.y - 10) < 1e-6;
+      var ok2 = r.frames.some(function(f){ return (f.srcCount||0) >= 2; });
+      var f12 = r.frames[11];                                 // k=12：源1(expireF=11) 已注销、源2 仍在册
+      var okHold = !!f12 && f12.state === '失衡' && f12.v > 0.1;
+      var f22 = r.frames[21];                                 // k=22：源2(expireF=21) 注销后的下一帧
+      var okExit = !!f22 && f22.ch === 'EXIT';
+      return {pass: !!(okNet && ok2 && okHold && okExit),
+        info:'k=3 净力=(' + (f3?f3.netForce.x.toFixed(4):'?') + ',' + (f3?f3.netForce.y.toFixed(4):'?') + ')（期望 (10,10)）；'
+           + '曾 srcCount>=2=' + ok2 + '；k=12 态=' + (f12?f12.state:'?') + ' v=' + (f12?f12.v.toFixed(4):'?') + '（期望 失衡 且 >0.1）；'
+           + 'k=22 ch=' + (f22?f22.ch:'?') + '（期望 EXIT）'};
+    } },
+  // 2) 推 + 拉共存：推出冲量、拉管退出；★ 推不登记 pull 源 ⇒ 退出时机不受推影响
+  { name:'序列2 · 推+拉共存（推出冲量、拉管退出；推不延长失衡）', axis:'x',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:30,
+         forces:[
+           {kind:'pushDirect', hitFrame:1, forceLevel:2, massLevel:3, dir:{x:1,y:0}},
+           {kind:'pull', hitFrame:1, forceLevel:2, massLevel:3, src:{x:5,y:5.5}, duration:20, decay:false}
+         ]},
+    check:function(r){
+      var f1 = r.frames[0], f2 = r.frames[1];
+      var okNoMove1 = Math.abs(f1.x1 - f1.x0) < 1e-12;        // 施力帧不动（冲量在本帧物理步之后才施入）
+      var okMove2 = Math.abs(f2.x1 - f2.x0) > 1e-9;           // 次帧起才有位移
+      var okSrc1 = r.frames.slice(1, 21).every(function(f){ return f.srcCount === 1; });   // k=2..21 恒只有 1 个源
+      var f22 = r.frames[21];
+      var okExit = !!f22 && f22.ch === 'EXIT';                // 退出 = 拉源 endFrame(21)+1
+      return {pass: !!(okNoMove1 && okMove2 && okSrc1 && okExit),
+        info:'k=1 位移=' + (f1.x1-f1.x0).toFixed(9) + '（期望 0）；k=2 位移=' + (f2.x1-f2.x0).toFixed(9) + '（期望 >0）；'
+           + 'k=2..21 srcCount 恒 1=' + okSrc1 + '；k=22 ch=' + (f22?f22.ch:'?') + '（期望 EXIT）'};
+    } },
+  // 3) 单源拉力时长到点：★ duration 以【帧】为单位 ⇒ expireF = hitFrame + duration（无换算）
+  { name:'序列3 · 单源拉力时长到点（帧制 duration=15 ⇒ k=16 末清速度、k=17 退出）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:25,
+         forces:[{kind:'pull', hitFrame:1, forceLevel:2, massLevel:3, src:{x:5,y:5.5},
+                  duration:15, expireStop:true, decay:true, totalDistance:2.5}]},
+    check:function(r){
+      var exp = 1 + 15;                                       // expireF = hitFrame(1) + duration(15) = 16
+      var lastF = r.frames[exp-2] || {}, expF = r.frames[exp-1] || {};
+      var okForce = lastF.v > 0.1;                            // 收尾前一帧仍有速度
+      var okStop  = expF.v === 0;                             // 该帧末被 TryEarlyStopPull 清 0
+      var okEnd   = (r.frames.length === exp + 1);            // 下一帧退出
+      var okLag   = Math.abs(r.frames[1].y1 - r.frames[1].y0) < 1e-12 && (r.frames[2].y1 - r.frames[2].y0) > 1e-9;
+      return {pass: !!(okForce && okStop && okEnd && okLag),
+        info:'duration=15 帧 ⇒ expireF=' + exp + '；k=' + (exp-1) + ' v=' + lastF.v.toFixed(4) + '（期望 >0.1）；k=' + exp +
+           ' v=' + expF.v + '（期望 0）；帧数=' + r.frames.length + '（期望 ' + (exp+1) + '）；k=2 不动/k=3 动=' + okLag};
+    } },
+  // 4) 硬直窗不被 StillPull 续期：★ 只有 BeginPull / KnockBack 刷新；弱拉力下 protectUntil 恒定
+  { name:'序列4 · 硬直窗不被 StillPull 续期（弱拉力 ⇒ protectUntil 恒定 = 5）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:20,
+         forces:[{kind:'pull', hitFrame:1, forceLevel:1, massLevel:3, src:{x:5,y:5.5}, duration:10, decay:false}]},
+    check:function(r){
+      // BeginPull 在 gate=2 刷新一次 ⇒ protectUntil = 2 + (protectFrames-1) = 5；此后每帧 StillPull 都不应再刷
+      var after = r.frames.filter(function(f){ return f.k >= 2; });
+      var okConst = after.length > 3 && after.every(function(f){ return f.protectUntil === 5; });
+      var okHold = after.some(function(f){ return f.v <= 0.1 && f.state === '失衡' && (f.srcCount||0) > 0; });  // 源兜底
+      return {pass: !!(okConst && okHold),
+        info:'protectUntil 序列=' + after.map(function(f){ return f.protectUntil; }).join(',') +
+             '（期望恒 5；若误把 StillPull 当刷新点则单调增长 ⇒ 本用例红）；弱力下靠源兜底仍失衡=' + okHold};
+    } },
+  // 5) 多源到点不清速度：★ TryEarlyStopPull 的 Count==1 守卫
+  { name:'序列5 · 多源到点不清速度（TryEarlyStopPull 的 Count==1 守卫）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:20,
+         forces:[
+           {kind:'pull', hitFrame:1, forceLevel:5, massLevel:3, src:{x:5,y:5.5},  duration:5,  decay:false},
+           {kind:'pull', hitFrame:1, forceLevel:5, massLevel:3, src:{x:6.5,y:3}, duration:30, decay:false}
+         ]},
+    check:function(r){
+      var f6 = r.frames[5];                                   // k=6：源1 的 endFrame（1+5）
+      var f7 = r.frames[6];                                   // k=7：源1 已注销，只剩源2
+      var okNotCleared = !!f6 && f6.v > 0.1;                  // ★ 到点帧为多源（帧首 2 个源）⇒ 未清速度
+      var okHold = !!f6 && f6.state === '失衡';
+      var okSrc  = !!f6 && f6.srcCount === 2 && !!f7 && f7.srcCount === 1;
+      return {pass: !!(okNotCleared && okHold && okSrc),
+        info:'k=6（源1 endFrame）v=' + (f6?f6.v.toFixed(4):'?') + '（期望 >0.1 ⇒ 未被清）；态=' + (f6?f6.state:'?') +
+             '；k=6 帧首源数=' + (f6?f6.srcCount:'?') + '（期望 2）；k=7 帧首源数=' + (f7?f7.srcCount:'?') + '（期望 1）'};
+    } },
+  // 6) 退出后重入：★ 帧循环不在退出时无条件 break；仍有未来事件则继续，等其再次令敌人失衡
+  { name:'序列6 · 退出后重入（第二个力事件再次令敌人失衡）', axis:'x',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:24,
+         forces:[
+           {kind:'pushProj', hitFrame:1,  forceLevel:1, massLevel:3, dir:{x:1,y:0}},
+           {kind:'pushProj', hitFrame:10, forceLevel:1, massLevel:3, dir:{x:1,y:0}}
+         ]},
+    check:function(r){
+      var ex = -1;
+      for (var i=0;i<r.frames.length;i++) if (r.frames[i].ch === 'EXIT') { ex = i; break; }
+      var okExit = ex >= 0;
+      var after = okExit ? r.frames.slice(ex+1) : [];
+      var okReenter = after.some(function(f){ return f.state === '失衡'; });
+      var okStatic  = after.filter(function(f){ return f.state === '非失衡'; })
+                           .every(function(f){ return Math.abs(f.x1 - f.x0) < 1e-12; });
+      var okMove    = after.some(function(f){ return Math.abs(f.x1 - f.x0) > 1e-9; });
+      return {pass: !!(okExit && okReenter && okStatic && okMove),
+        info:'首个 EXIT 帧 k=' + (okExit ? r.frames[ex].k : '—') + '；其后再失衡=' + okReenter +
+             '；非失衡帧位置冻结=' + okStatic + '；重入后有位移=' + okMove + '；总帧数=' + r.frames.length};
+    } },
+  // 7) ★ 急停（判据 B 急停半径）：进入效果源 0.6708 内
+  //    ⇒ TryEarlyStopPull 清零速度（Count==1 且本源）；★ 不 EndPull ⇒ 该源仍在册 ⇒ 失衡持续到拉力结束。
+  { name:'序列7 · 急停判据 B（进入急停半径 0.6708 ⇒ 清零速度、不退出失衡）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:40,
+         forces:[{kind:'pull', hitFrame:1, forceLevel:5, massLevel:3, src:{x:5,y:3.9}, duration:60, decay:false}]},
+    check:function(r){
+      var idxS = -1;
+      for (var i=0;i<r.frames.length;i++) if (r.frames[i].stopRadius && r.frames[i].stopRadius.hit) { idxS = i; break; }
+      var okMark = idxS >= 0;
+      var okCleared = okMark && r.frames[idxS].stopRadius.cleared && r.frames[idxS].v === 0;   // 该帧末速度被清 0
+      // ★ 关键：只清速度、不 EndPull ⇒ 该源仍在册 ⇒ 急停之后【不退出失衡】（持续到拉力结束）
+      var okHold = okMark && r.frames.slice(idxS).every(function(f){ return f.state === '失衡'; });
+      var okSrc  = okMark && (r.frames[idxS].srcCount === 1);
+      return {pass: !!(okMark && okCleared && okHold && okSrc),
+        info:(okMark ? '急停帧 k=' + r.frames[idxS].k + ' dist=' + r.frames[idxS].stopRadius.dist.toFixed(4) +
+                       '（< ' + K.stopRadius + '）清零速度=' + r.frames[idxS].stopRadius.cleared + '、|v|=' + r.frames[idxS].v
+                     : '未出现急停帧') +
+             '；急停后在册源数=' + (okMark ? r.frames[idxS].srcCount : '?') + '、之后仍失衡=' + okHold +
+             '（只清速度、不 EndPull ⇒ 失衡持续到拉力结束）'};
+    } },
+  // 8) ★ 溅射降级：目标太近（<0.25 格，TOO_CLOSE_TOLERANCE_SQR=0.0625）⇒ 力度等级 −2
+  //    且【方向强制改为径向 = 效果源 → 敌人】（实测口径）
+  { name:'序列8 · 溅射降级（太近 ⇒ 力度−2 + 方向改径向）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:6, splash:true,
+         forces:[{kind:'pushProj', hitFrame:1, forceLevel:3, massLevel:3,
+                  dir:{x:0,y:1}, awayDir:{x:0,y:1}, src:{x:5,y:3.2}, effSrc:{x:5,y:3.2}}]},
+    check:function(r){
+      var exp = K.pushForces[1] * 0.01;                     // 降级：idx 由 3 降到 1
+      var okForce = Math.abs(r.forceVal - exp) < 1e-12;
+      var okDir = Math.abs(r.dir.x) < 1e-9 && Math.abs(r.dir.y + 1) < 1e-9;   // 径向 = (敌 − 效果源) = (0,−1)
+      var f1 = r.frames[0];
+      var okDown = !!f1 && (f1.y1 < f1.y0);
+      var okFlag = (r.events||[]).some(function(e){ return e._splashHit; });
+      return {pass: !!(okForce && okDir && okDown && okFlag),
+        info:'力度=' + r.forceVal + '（期望 ' + exp + ' = pushForces[1]×0.01）；方向=(' +
+             r.dir.x.toFixed(3) + ',' + r.dir.y.toFixed(3) + ')（期望 (0,−1) 径向）；首帧向下位移=' + okDown};
+    } },
+  // 9) ★ 溅射降级的【方向】判据：ParseDirection(目标−源) != source.direction
+  //    —— 4 方向枚举不等（等价夹角 > 45°），**不是 dot 阈值**。
+  //    这里距离 2 格（远 > 0.25）⇒ 只可能由方向判据触发；力方向 = 右(0°)，径向 = 下(270°) ⇒ 不等。
+  { name:'序列9 · 溅射降级（方向不符 ⇒ 力度−2 + 径向）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:4, splash:true,
+         forces:[{kind:'pushProj', hitFrame:1, forceLevel:3, massLevel:3, dirMode:'preset',
+                  dir:{x:1,y:0}, awayDir:{x:1,y:0}, src:{x:5,y:5}, effSrc:{x:5,y:5}}]},
+    check:function(r){
+      var exp = K.pushForces[1] * 0.01;
+      var okForce = Math.abs(r.forceVal - exp) < 1e-12;
+      var okDir = Math.abs(r.dir.x) < 1e-9 && Math.abs(r.dir.y + 1) < 1e-9;
+      var okFar = Math.hypot(0, -2) > 0.25;
+      return {pass: !!(okForce && okDir && okFar),
+        info:'距离 2 格（>0.25 ⇒ 只能由方向判据触发）；力度=' + r.forceVal + '（期望 ' + exp + '）；方向=(' +
+             r.dir.x.toFixed(3) + ',' + r.dir.y.toFixed(3) + ')（期望 (0,−1) 径向）'};
+    } },
+  // 9b) 同构但方向相符（力方向 = 下 = 径向）⇒ 不降级
+  { name:'序列9b · 溅射降级（方向相符 ⇒ 不降级）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3}, maxFrames:4, splash:true,
+         forces:[{kind:'pushProj', hitFrame:1, forceLevel:3, massLevel:3, dirMode:'preset',
+                  dir:{x:0,y:-1}, awayDir:{x:0,y:-1}, src:{x:5,y:5}, effSrc:{x:5,y:5}}]},
+    check:function(r){
+      var full = K.pushForces[3] * 0.01;
+      return {pass: Math.abs(r.forceVal - full) < 1e-12,
+        info:'方向与径向同向 ⇒ 不降级；力度=' + r.forceVal + '（期望 ' + full + '）'};
+    } },
+];
+
+/* ★★ 机制覆盖度登记表 ——
+   动机：接触切向摩擦早就写在文档里（`maxFriction = friction × normalImpulse`），
+   但**工具长期没实现**，而且 10 套标定用例全绿 —— 因为那些用例的摩擦冲量恰好恒为 0
+   （无接触 / 接触法向与速度同轴 / 法向冲量=0）⇒ "文档写了但模型没做" 这类缺口**测不出来**。
+   ⇒ 现在把每个"可被场景掩盖"的机制登记在这里 + 一个激活判据；runCases 末尾统计覆盖度，
+     任何机制**没有一条用例激活**就整体判不通过（把静默缺口变成红灯）。 */
+var MECH = [
+  { key:'mu', name:'接触切向摩擦（μ>0 且真的吃到速度）',
+    hint:'需要「接触法向与速度不同轴」且「法向冲量≠0」的斜向构型（如测试9：斜拉 + 缝挡 x）',
+    active:function(r){ return r.frames.some(function(f){ return (f.mu || 0) > 1e-9; }); } },
+  { key:'toi', name:'TOI 通道（SolveTOI 子步执行）',
+    hint:'需要 0 ≤ cd < 0.09625 的接触',
+    active:function(r){ return r.frames.some(function(f){ return /TOI/.test(f.ch); }); } },
+  { key:'inside', name:'完全嵌入的 MTV 选面',
+    hint:'需要两 cap 都落进同一个墙格核心',
+    active:function(r){ return r.frames.some(function(f){ return /\[体内\]/.test((f.log||[]).map(function(l){return l.d;}).join('')); }); } },
+  { key:'pull', name:'拉力（力累加器 ⇒ 次帧积分）',
+    hint:'需要 mode=pull 且施力窗口非空',
+    active:function(r){ return r.frames.some(function(f){ return (f.log||[]).some(function(l){ return /BeginPull/.test(l.t); }); }); } },
+  { key:'fricLin', name:'线性摩擦（OnTick 每帧 −μ_g）',
+    hint:'需要至少一帧失衡且有速度',
+    active:function(r){ return r.frames.some(function(f){ return (f.log||[]).some(function(l){ return /OnTick/.test(l.t) || f.v > 0; }); }); } },
+  /* ── 施力序列 / 多源退出 机制（急停半径已建模）──
+     全部为「已建模但可被场景掩盖」的机制，均登记以把静默缺口变成红灯。 */
+  { key:'multiSrc', name:'多源叠加（同帧多个拉力矢量相加进同一力累加器）',
+    hint:'需要两个 pull 事件在同一窗口内并存（如 序列1 / 序列5）',
+    active:function(r){ return r.frames.some(function(f){ return (f.srcCount||0) >= 2; }); } },
+  { key:'srcHold', name:'源兜底退出（在册源数 > 0 即不退出，哪怕已停下）',
+    hint:'需要「速度已 ≤0.1 但源仍在册」的构型（弱拉力，如 序列4）',
+    active:function(r){ return r.frames.some(function(f){ return (f.srcCount||0) > 0 && f.state === '失衡' && f.v <= 0.1; }); } },
+  { key:'protectNoRefresh', name:'硬直窗不被 StillPull 续期（只有 BeginPull/KnockBack 刷新）',
+    hint:'需要拉源弱到速度掉到 ≤0.1，观察 protectUntil 恒定不再增长（如 序列4）',
+    active:function(r){
+      return r.frames.some(function(f){ return (f.log||[]).some(function(l){ return /StillPull/.test(l.t); }); }) &&
+             r.frames.some(function(f){ return typeof f.protectUntil === 'number'; });
+    } },
+  { key:'earlyStopGuard', name:'TryEarlyStopPull 单源守卫（多源共存时不清速度）',
+    hint:'需要多源并存且其一到点（如 序列1 / 序列5）',
+    active:function(r){ return r.frames.some(function(f){ return (f.log||[]).some(function(l){ return /多源共存 ⇒ 不清速度/.test(l.d); }); }); } },
+  { key:'schedSeq', name:'序列调度（三类管道各按其时机施力）',
+    hint:'需要 pushProj / pushDirect / pull 至少两类事件（如 序列2）',
+    active:function(r){
+      var hasPush = false, hasPull = false;
+      r.frames.forEach(function(f){ (f.log||[]).forEach(function(l){
+        if (/非弹道推/.test(l.t)) hasPush = true;
+        if (/BeginPull/.test(l.t)) hasPull = true;
+      }); });
+      return hasPush && hasPull;
+    } },
+  { key:'reenter', name:'退出后重入（后续力事件再次令敌人失衡）',
+    hint:'需要「先退出、之后仍有未来力事件」的序列（如 序列6）',
+    active:function(r){
+      var ex = -1;
+      for (var i=0;i<r.frames.length;i++) if (r.frames[i].ch === 'EXIT') { ex = i; break; }
+      return ex >= 0 && r.frames.slice(ex+1).some(function(f){ return f.state === '失衡'; });
+    } },
+  { key:'stopRadius', name:'急停（判据 A 距拉力终点 ≤0.05 ∨ 判据 B 距效果源 ≤0.6708 ⇒ 清零速度一次、不 EndPull ⇒ 失衡持续到拉力结束）',
+    hint:'需要敌人进入拉力终点 0.05 内（A）或距效果源/施力者中心 0.6708 内（B）（如 测试10 / 测试11 / 序列7）',
+    active:function(r){ return r.frames.some(function(f){ return f.stopRadius && f.stopRadius.hit; }); } },
+  { key:'splashRadial', name:'溅射降级（太近/太歪 ⇒ 力度−2 且方向强制改径向）',
+    hint:'需要 push 事件 + splash 开 + 「太近」(≤0.25 格) 或「方向 4 方向量化不符」(如 序列8 / 序列9)',
+    active:function(r){ return (r.events||[]).some(function(e){ return e._splashHit; }); } },
+];
+
+function runCases() {
+  var res = CASES.map(function(c){
+    var r = simulate(c.cfg);
+    if (r.err) return {name:c.name, pass:false, err:r.err, rows:[]};
+    if (c.check) { var res = c.check(r); return {name:c.name, pass:res.pass, info:res.info, rows:[]}; }
+    var vals = r.frames.map(function(f){ return c.axis === 'x' ? f.x1 : f.y1; });
+    var rows = [], pass = true;
+    // 拉力用例从第 3 帧起才有位移，前面补 0
+    // ★ ：拉力首次位移落在 k = 施力帧 + 1（施力帧的协程阶段在物理步之后施入累加器，
+    //   次帧物理步才积分）。命中帧 k=1 与施力帧 k=gate 均无位移。
+    //   ⇒ 期望数组第 1 项对应 k = gate+1，其数组下标 = gate（0 基）⇒ off = pullStart。
+    //   ⚠ 仅拉力路径调整；pushProj / pushDirect 的既有标定不动（off=0）。
+    var off = (c.cfg.mode === 'pull') ? c.cfg.pullStart : 0;
+    for (var i=0;i<c.expect.length;i++){
+      var got = vals[i+off];
+      var e = c.expect[i];
+      var d = (got == null) ? NaN : Math.abs(got - e);
+      if (!(d <= 1e-4)) pass = false;
+      rows.push({i:i+1, exp:e, got:got, d:d});
+    }
+    return {name:c.name, pass:pass, rows:rows, vals:vals};
+  });
+  // ── 覆盖度统计：每条机制至少要有一条用例「激活」它 ──
+  var cov = MECH.map(function(m){
+    var hit = CASES.filter(function(c, i){
+      var r = simulate(c.cfg);
+      if (r.err) return false;
+      return m.active(r);
+    }).map(function(c){ return c.name.replace(/^([^·]+·)\s*/, '').slice(0, 18); });
+    return {mech:m, cases:hit};
+  });
+  var miss = cov.filter(function(x){ return x.cases.length === 0; });
+  res.push({
+    name:'机制覆盖度自检（' + (MECH.length - miss.length) + '/' + MECH.length + ' 条机制有用例激活）',
+    pass: miss.length === 0, rows: [],
+    info: cov.map(function(x){
+      return (x.cases.length ? '✅ ' : '❌ ') + x.mech.name +
+        (x.cases.length ? ' ← ' + x.cases.join('、') : '：<b>无用例覆盖</b> ⇒ ' + x.mech.hint);
+    }).join('<br>')
+  });
+  return res;
+}
+
+return {K:K, simulate:simulate, CASES:CASES, runCases:runCases, manifoldAt:manifoldAt, roundHalfUp:roundHalfUp};
+})();
+if (typeof module !== 'undefined' && module.exports) module.exports = SIM;
+</script>
+
+<script>
+/* ================= UI ================= */
+var W = 13, H = 9, CELL = 42;
+var walls = [];         // [[x,y],...]
+var events = [];        // 施力事件序列（每个 = 一个独立施力事件）
+var putMode = 'enemy';  // 'enemy' | 'effSrc' | 'forceSrc'
+var selEv = 0;          // 选中事件下标
+var $ = function(id){ return document.getElementById(id); };
+
+var KIND_LABEL = { pushProj:'弹道推力', pushDirect:'非弹道推力', pull:'拉力' };
+
+function hasWall(x,y){ return walls.some(function(w){ return w[0]===x&&w[1]===y; }); }
+function toggleWall(x,y){
+  for (var i=0;i<walls.length;i++) if (walls[i][0]===x&&walls[i][1]===y){ walls.splice(i,1); draw(); return; }
+  walls.push([x,y]); draw();
+}
+function sx(wx){ return (wx+0.5)*CELL; }
+function sy(wy){ return (H-0.5-wy)*CELL; }
+function num(id, d){ var v = parseFloat($(id).value); return isFinite(v) ? v : d; }
+function intv(id, d){ var v = parseInt($(id).value); return isFinite(v) ? v : d; }
+function intv0(v){ var n = parseInt(v); return isFinite(n) ? n : 0; }
+function enemyPos(){ return {x: num('sx', 5), y: num('sy', 3)}; }
+
+/* ---- 事件模型 ----
+   ★ 两个「源」是不同的点（origin = source.mapPosition + dirOffset）：
+     效果源 effSrc  = 施加拉力的【干员位置】
+                      · 拉力：急停判据 B（急停半径 0.6708）判定的圆心 = 施力者中心
+                      · 推力：溅射降级的判定源（太近 / 太歪 ⇒ 力度−2 且方向改为「效果源→敌人」）
+     力起点 forceSrc = 【力源】= 拉拽原点 origin
+                      · 力方向的参照（拉力 = 指向此点；推力「由力源计算」= 推离此点）
+                      · 拉力衰减分子 d = |敌 − 此点|（缺省；见高级参数「弹道位 ≠ 源」）
+                      · 拉力：急停判据 A（到点容差 ≤ 0.05）判定的圆心 = 拉拽终点（★ 拉力时请填这里）
+   dirMode: 'preset'（预设角度，力方向 = 角度）| 'link'（由力源计算） */
+function newEvent(kind){
+  var p = enemyPos();
+  var src = (kind === 'pull') ? {x:p.x, y:p.y + 2.5} : {x:p.x, y:p.y - 1};
+  return {
+    kind: kind,
+    hitFrame: 1,
+    forceLevel: 1,
+    effSrc:   {x: src.x, y: src.y},
+    forceSrc: {x: src.x, y: src.y},
+    dirMode: (kind === 'pull') ? 'link' : 'preset',
+    ang: 180,
+    duration: (kind === 'pull') ? 30 : 0,   // ★ 新增拉力默认 30 帧（非 0）
+    decay: true,
+    expireStop: false,                      // ★ 默认「仅停力」（不清速度）
+    splash: false                           // ★ 推力事件：溅射降级（默认关）
+  };
+}
+/* 力的实际方向（地图箭头 / 派生显示 / readCfg 共用）
+     preset ⇒ 角度；link ⇒ 推力取「敌人 − 力源」（推离力源）、拉力取「力源 − 敌人」（拉向力源） */
+function dirOf(e, ex, ey){
+  if (e.dirMode === 'link'){
+    var fx = e.forceSrc.x, fy = e.forceSrc.y;
+    if (isFinite(fx) && isFinite(fy)){
+      var dx = ex - fx, dy = ey - fy, L = Math.hypot(dx, dy) || 1e-12;
+      return (e.kind === 'pull') ? {x: -dx/L, y: -dy/L} : {x: dx/L, y: dy/L};
+    }
+  }
+  var a = (parseFloat(e.ang) || 0) * Math.PI / 180;
+  return {x: Math.cos(a), y: Math.sin(a)};
+}
+function degOf(d){ return Math.round(((Math.atan2(d.y, d.x) * 180 / Math.PI) % 360 + 360) % 360); }
+function normAng(a){ return ((parseFloat(a) || 0) % 360 + 360) % 360; }
+/* ★ 预设方向只开放这 8 个（用户要求：自由角度难判参照）—— 其余角度请用「由力源计算」 */
+var DIR8 = [[90,'↑ 上'],[270,'↓ 下'],[180,'← 左'],[0,'→ 右'],
+            [135,'↖ 左上'],[45,'↗ 右上'],[225,'↙ 左下'],[315,'↘ 右下']];
+function arrowOf(deg){
+  var a = ((deg % 360) + 360) % 360;
+  var tbl = [[0,'→'],[45,'↗'],[90,'↑'],[135,'↖'],[180,'←'],[225,'↙'],[270,'↓'],[315,'↘']];
+  var best = tbl[0], bd = 999;
+  for (var i=0;i<tbl.length;i++){
+    var d = Math.abs(((a - tbl[i][0]) % 360 + 540) % 360 - 180);
+    if (d < bd){ bd = d; best = tbl[i]; }
+  }
+  return best[1];
+}
+/* 首次可见位移帧（实测对照的默认对齐点） */
+function firstDispFrame(e){
+  if (e.kind === 'pull') return (e.hitFrame|0) + 2;
+  if (e.kind === 'pushDirect') return (e.hitFrame|0) + 1;
+  return (e.hitFrame|0);
+}
+
+/* ---- 地图 ---- */
+function draw(){
+  var s = '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">'+
+          '<path d="M2 1L8 5L2 9" fill="none" stroke="#d85a30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>';
+  s += '<rect x="0" y="0" width="'+W*CELL+'" height="'+H*CELL+'" fill="#ffffff"/>';
+  for (var x=0;x<W;x++) for (var y=0;y<H;y++){
+    var wall = hasWall(x,y);
+    s += '<rect class="cell" data-x="'+x+'" data-y="'+y+'" x="'+(x*CELL)+'" y="'+((H-1-y)*CELL)+
+         '" width="'+CELL+'" height="'+CELL+'" fill="'+(wall?'#d3d1c7':'#ffffff')+
+         '" stroke="#e2e0da" stroke-width="1"/>';
+  }
+  for (var i=1;i<W;i++) s += '<line x1="'+(i*CELL)+'" y1="0" x2="'+(i*CELL)+'" y2="'+(H*CELL)+'" stroke="#f0eee9"/>';
+  for (var j=1;j<H;j++) s += '<line x1="0" y1="'+(j*CELL)+'" x2="'+(W*CELL)+'" y2="'+(j*CELL)+'" stroke="#f0eee9"/>';
+  walls.forEach(function(w){
+    s += '<text x="'+sx(w[0])+'" y="'+(sy(w[1])+4)+'" text-anchor="middle" font-size="11" fill="#5f5e5a">'+w[0]+','+w[1]+'</text>';
+  });
+  var ep = enemyPos();
+  var ex = ep.x, ey = ep.y, hasE = isFinite(ex) && isFinite(ey);
+  // 各事件的「源」与力方向箭头
+  events.forEach(function(e, i){
+    var sel = (i === selEv);
+    var isPull = e.kind === 'pull';
+    // 效果源（菱形，橙）
+    if (e.effSrc && isFinite(e.effSrc.x) && isFinite(e.effSrc.y) && (isPull || sel)){
+      var qx = sx(e.effSrc.x), qy = sy(e.effSrc.y), r = sel ? 8 : 6;
+      s += '<polygon points="'+qx+','+(qy-r)+' '+(qx+r)+','+qy+' '+qx+','+(qy+r)+' '+(qx-r)+','+qy+
+           '" fill="#f5c4b3" stroke="#993c1d" stroke-width="'+(sel?2:1)+'"/>';
+    }
+    // 力源（方框，蓝）
+    if (e.forceSrc && isFinite(e.forceSrc.x) && isFinite(e.forceSrc.y) && (isPull || sel)){
+      var px = sx(e.forceSrc.x), py = sy(e.forceSrc.y), r2 = sel ? 8 : 6;
+      s += '<rect x="'+(px-r2)+'" y="'+(py-r2)+'" width="'+(2*r2)+'" height="'+(2*r2)+
+           '" fill="#b5d4f4" stroke="#0c447c" stroke-width="'+(sel?2:1)+'"/>';
+    }
+    // 力方向箭头（从敌人起点出发）
+    if (hasE){
+      var d = dirOf(e, ex, ey);
+      var L = sel ? 52 : 40;
+      var x1 = sx(ex), y1 = sy(ey);
+      var x2 = x1 + d.x*L, y2 = y1 - d.y*L;
+      s += '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+((isPull)?'#d4537e':'#185fa5')+
+           '" stroke-width="'+(sel?2.5:1.5)+'" opacity="'+(sel?1:0.55)+'" marker-end="url(#ah)"/>';
+      s += '<text x="'+(x2+6)+'" y="'+(y2+4)+'" font-size="10" fill="'+((isPull)?'#993556':'#185fa5')+
+           '" opacity="'+(sel?1:0.7)+'">#'+(i+1)+'</text>';
+    }
+  });
+  // 敌人起点
+  if (hasE){
+    s += '<circle cx="'+sx(ex)+'" cy="'+sy(ey)+'" r="7" fill="#d3d1c7" stroke="#2c2c2a"/>';
+    s += '<text x="'+sx(ex)+'" y="'+(sy(ey)-11)+'" text-anchor="middle" font-size="11" fill="#2c2c2a">敌 '+ex+','+ey+'</text>';
+  }
+  $('map').innerHTML = s;
+  Array.prototype.forEach.call($('map').querySelectorAll('.cell'), function(el){
+    el.addEventListener('click', function(){ toggleWall(parseInt(el.dataset.x), parseInt(el.dataset.y)); });
+  });
+}
+
+function drawTrack(frames){
+  var s = '<rect x="0" y="0" width="'+W*CELL+'" height="'+H*CELL+'" fill="#ffffff"/>';
+  for (var x=0;x<W;x++) for (var y=0;y<H;y++){
+    if (hasWall(x,y)) s += '<rect x="'+(x*CELL)+'" y="'+((H-1-y)*CELL)+'" width="'+CELL+'" height="'+CELL+'" fill="#d3d1c7" stroke="#e2e0da"/>';
+  }
+  var pts = frames.map(function(f){ return [sx(f.x1), sy(f.y1)]; });
+  pts.unshift([sx(frames[0]?frames[0].x0:0), sy(frames[0]?frames[0].y0:0)]);
+  for (var i=1;i<pts.length;i++)
+    s += '<line x1="'+pts[i-1][0]+'" y1="'+pts[i-1][1]+'" x2="'+pts[i][0]+'" y2="'+pts[i][1]+'" stroke="#185fa5" stroke-width="1.5"/>';
+  pts.forEach(function(p,i){
+    s += '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(i===0?4:3)+'" fill="'+(i===0?'#b5d4f4':'#378add')+'"/>';
+  });
+  var last = pts[pts.length-1];
+  s += '<circle cx="'+last[0]+'" cy="'+last[1]+'" r="7" fill="none" stroke="#d85a30" stroke-width="2"/>';
+  $('track').innerHTML = s;
+}
+
+/* ---- 事件序列表 ---- */
+function optHtml(list, cur){
+  return list.map(function(o){
+    return '<option value="'+o[0]+'"'+(String(o[0])===String(cur)?' selected':'')+'>'+o[1]+'</option>';
+  }).join('');
+}
+function renderEvents(){
+  var h = '<tr><th class="l">#</th><th class="l">类型</th><th>命中帧</th><th>力度</th>'+
+          '<th class="l">效果源 <span class="hint" style="font-weight:400">(干员位)</span></th>'+
+          '<th class="l">力起点 <span class="hint" style="font-weight:400">(力源)</span></th>'+
+          '<th class="l">方向模式</th><th class="l">方向</th>'+
+          '<th>时长(帧)</th><th class="l">衰减 / 溅射</th><th class="l">到点</th><th></th></tr>';
+  var ep = enemyPos();
+  events.forEach(function(e, i){
+    var isPull = e.kind === 'pull';
+    var d = dirOf(e, ep.x, ep.y), deg = degOf(d);
+    h += '<tr data-i="'+i+'"'+(i===selEv?' class="sel"':'')+'>'+
+      '<td class="l mono">'+(i+1)+'</td>'+
+      '<td class="l"><select data-f="kind">'+
+        optHtml([['pushProj','弹道推力'],['pushDirect','非弹道推力'],['pull','拉力']], e.kind)+'</select></td>'+
+      '<td><input type="number" data-f="hitFrame" min="0" value="'+e.hitFrame+'" style="width:50px"></td>'+
+      '<td><input type="number" data-f="forceLevel" min="0" max="6" value="'+e.forceLevel+'" style="width:46px"></td>'+
+      '<td class="l">x<input type="number" data-f="effx" step="0.5" value="'+e.effSrc.x+'" style="width:54px">'+
+        ' y<input type="number" data-f="effy" step="0.5" value="'+e.effSrc.y+'" style="width:54px"></td>'+
+      '<td class="l">x<input type="number" data-f="fsx" step="0.5" value="'+e.forceSrc.x+'" style="width:54px">'+
+        ' y<input type="number" data-f="fsy" step="0.5" value="'+e.forceSrc.y+'" style="width:54px"></td>'+
+      '<td class="l"><select data-f="dirMode">'+
+        optHtml([['preset','预设角度'],['link','由力源计算']], e.dirMode)+'</select></td>'+
+      '<td class="l">' + (e.dirMode === 'link'
+        ? '<span class="mono" title="由力源与敌人位置实时算出">'+arrowOf(deg)+' '+deg+'°</span>'
+        : '<select data-f="ang" title="预设方向（9 选一）；其余角度请用「由力源计算」">'+
+            DIR8.map(function(o){
+              return '<option value="'+o[0]+'"'+(Math.abs(normAng(e.ang) - o[0]) < 1e-9 ? ' selected' : '')+'>'+o[1]+'</option>';
+            }).join('') + '</select>') + '</td>'+
+      '<td>' + (isPull
+        ? '<input type="number" data-f="duration" min="0" value="'+e.duration+'" style="width:54px">'
+        : '<span class="hint">—</span>') + '</td>'+
+      '<td class="l">' + (isPull
+        ? '<select data-f="decay">'+optHtml([['1','开'],['0','关']], e.decay?'1':'0')+'</select>'
+        : '<select data-f="splash" title="溅射降级（仅推力）">'+optHtml([['0','关'],['1','开']], e.splash?'1':'0')+'</select>') + '</td>'+
+      '<td class="l">' + (isPull
+        ? '<select data-f="expireStop">'+optHtml([['1','清速+End'],['0','仅停力']], e.expireStop?'1':'0')+'</select>'
+        : '<span class="hint">—</span>') + '</td>'+
+      '<td><button data-act="del" title="删除该事件">×</button></td>'+
+    '</tr>';
+  });
+  if (!events.length)
+    h += '<tr><td class="l hint" colspan="12">还没有事件 —— 点上面的按钮添加（可加多个，各自按类型择帧生效）</td></tr>';
+  $('evtbl').innerHTML = h;
+  $('evHint').innerHTML = events.length
+    ? '共 <b>'+events.length+'</b> 个事件；点行可选中（选中行 = 地图上放「源」的目标）'
+    : '';
+  refreshDerived();
+}
+
+/* ---- 配置读取 ---- */
+function readCfg(){
+  var ml = intv('ml', 3);
+  var ep = enemyPos();
+  var forces = events.map(function(e, i){
+    var o = { kind: e.kind, hitFrame: intv0(e.hitFrame), forceLevel: intv0(e.forceLevel),
+              massLevel: ml, sourceId: i, splash: !!e.splash,   // ★ 溅射降级 = 每个推力事件自己的开关
+              src: {x: e.forceSrc.x, y: e.forceSrc.y},                       // 力源（力方向 + 衰减分子参照）
+              effSrc: {x: e.effSrc.x, y: e.effSrc.y} };                      // 效果源（急停半径 / 溅射判定）
+    if (e.kind === 'pull'){
+      o.duration = Math.max(0, intv0(e.duration));
+      o.decay = !!e.decay;
+      o.expireStop = !!e.expireStop;
+      o.totalDistance = null;                                               // 自动：BeginPull 帧现测
+      if (e.dirMode === 'preset'){ o.dirMode = 'preset'; o.dir = dirOf(e, ep.x, ep.y); }
+      // dirMode='link' ⇒ 不传 dir，simulate 内部按「指向力源」逐帧算（= 游戏行为）
+    } else {
+      o.dir = dirOf(e, ep.x, ep.y);                                         // 推力：预设角 或 由力源推离
+      o.awayDir = o.dir;
+      if (e.dirMode === 'preset') o.dirMode = 'preset';
+    }
+    return o;
+  });
+  return {
+    walls: walls.slice(),
+    start: {x: ep.x, y: ep.y},
+    forces: forces,
+    mu: num('mu', 0.4),
+    frictionFactor: num('ff', 1),
+    stepsPerFrame: intv('spf', 1),
+    maxFrames: intv('maxf', 60),
+    continuous: $('cdmode').value === '1',
+    bladeToi: ($('blade').value === 'auto') ? undefined : ($('blade').value === '1'),
+    stunned: true
+  };
+}
+
+/* ---- 派生显示 ---- */
+function showDerive(cfg, r){
+  var ep = cfg.start;
+  var txt = '<b>事件派生</b>（idx = 3 + 力级 − 重量级）：<br>';
+  if (!cfg.forces.length) txt += '<span class="r">⚠ 事件序列为空 ⇒ 不会失衡</span><br>';
+  cfg.forces.forEach(function(f){
+    var idx = SIM.K.zeroIndex + (f.forceLevel - f.massLevel);
+    var tbl = f.kind === 'pull' ? SIM.K.pullForces : SIM.K.pushForces;
+    var v = (idx >= 0 && idx < tbl.length) ? tbl[idx] : 0;
+    var line = '#' + (f.sourceId + 1) + ' <b>' + KIND_LABEL[f.kind] + '</b>（命中帧 ' + f.hitFrame + '）⇒ idx=' + idx +
+      ' ⇒ ' + (f.kind === 'pull' ? 'pullForces' : 'pushForces') + '[' + idx + '] = <b>' + v + '</b>';
+    if (idx < 0 || idx >= tbl.length) line += ' <span class="r">⚠ idx 越界 ⇒ 该事件失效</span>';
+    else if (v === 0) line += ' <span class="r">⚠ 力度 = 0（等级差 < −2）⇒ 该事件失效</span>';
+    else line += (f.kind === 'pull' ? ' ⇒ F = ' + v + ' N，Δv/帧 = ' + (v/30).toFixed(4)
+                                    : ' ⇒ Δv = ' + (v*0.01).toFixed(2) + ' m/s');
+    // 力的实际方向
+    var dirTxt = '';
+    if (f.kind === 'pull'){
+      if (f.dirMode === 'preset' && f.dir){
+        dirTxt = '方向 = <b>预设 ' + degOf(f.dir) + '°</b>（★ 对照：游戏里拉力恒为「指向力源」）';
+      } else {
+        var dsl = {x: f.src.x - ep.x, y: f.src.y - ep.y};
+        dirTxt = '方向 = <b>指向力源</b> ' + degOf(dsl) + '°（逐帧重算）';
+      }
+    } else {
+      dirTxt = '方向 = <b>' + degOf(f.dir) + '°</b>' + (f.dirMode === 'preset' ? '（预设角）' : '（由力源推离）');
+    }
+    line += '<br><span class="hint">' + dirTxt +
+      '；效果源 (' + f.effSrc.x + ',' + f.effSrc.y + ') · 力源 (' + f.src.x + ',' + f.src.y + ')' +
+      (f.kind === 'pull' ? '；衰减分子 d = |敌 − 力源|（首帧 = totalDistance ⇒ att ≡ 1）' : '') + '</span>';
+    if (f.kind === 'pull'){
+      var hit = f.hitFrame, gate = hit + 1, dur = f.duration|0;
+      var exp = dur > 0 ? (hit + dur) : null;
+      line += '<br><span class="hint">k=' + hit + ' 命中建链接（不失衡 · 不走物理步）· k=' + gate +
+        ' 协程段 BeginPull（只写力累加器 ⇒ 该帧不动）· k=' + (gate+1) + ' 首次位移；' +
+        (exp ? '时长 ' + dur + ' 帧 ⇒ 第 ' + exp + ' 帧末收尾（该帧力已施），第 ' + (exp+1) + ' 帧退出'
+             : '时长不限（实机恒有 _pullDuration / EnsureLifeTime，此档仅作对照）') + '</span>';
+    } else if (f.kind === 'pushDirect'){
+      line += '<br><span class="hint">k=' + f.hitFrame + ' 末施冲量 ⇒ k=' + (f.hitFrame+1) + ' 位移（该帧先经一次线性摩擦）；不登记拉源</span>';
+    } else {
+      line += '<br><span class="hint">k=' + f.hitFrame + ' 命中即施冲量 ⇒ <b>同帧</b>位移；不登记拉源</span>';
+    }
+    txt += line + '<br>';
+  });
+  if (events.some(function(e){ return e.splash; })){
+    var near = events.filter(function(e){
+      var d = (function(){ var dx = ep.x - e.effSrc.x, dy = ep.y - e.effSrc.y; return Math.hypot(dx,dy); })();
+      return e.kind !== 'pull' && d < Math.sqrt(SIM.K.tooCloseSqr);
+    });
+    txt += '<span class="hint">★ 溅射降级已开（<b>仅对「方向模式 = 预设角度」的事件生效</b> —— 对应 <span class="mono">Nodes.Knockback._useSourceDirection</span> 为真）：<br>' +
+      '① 目标距效果源 ≤ <b>0.25 格</b>（<span class="mono">TOO_CLOSE_TOLERANCE_SQR = 0.0625</span>）；或<br>' +
+      '② <b>方向不符</b>：<span class="mono">ParseDirection(目标 − 源) ≠ 源朝向</span>，即 <b>4 方向量化后不相等</b>' +
+      '（等价夹角 &gt; 45°，<b>不是 dot 阈值</b>）<br>' +
+      '⇒ 力度等级 −2 且<b>方向强制改为径向</b>（效果源 → 敌人）。' +
+      (near.length ? '；<span class="y">当前有 ' + near.length + ' 个事件满足「太近」</span>' : '') + '</span><br>';
+  }
+  if (events.length > 1){
+    var order = events.slice().sort(function(a,b){ return a.hitFrame - b.hitFrame; });
+    txt += '<span class="hint">多力并存：最早施力 = 事件 #' + (order[0].sourceId+1) + '（命中帧 ' + order[0].hitFrame + '）；' +
+      '各力矢量相加进同一力累加器，线性摩擦每帧只削一次。</span><br>';
+  }
+  txt += '<hr style="border:0;border-top:1px solid var(--bd);margin:8px 0">' +
+    '<b>退出条件</b>：<span class="mono">|v| ≤ 0.1</span> 且硬直窗已过 <b>且 在册拉源数 = 0</b> ⇒ 关箱冻结。' +
+    '<br><span class="hint">★ 摩擦先判、源数后判 ⇒ 源非空即留（哪怕已停下）；只有<b>拉力</b>登记源（推不登记）⇒ 推不延长失衡。</span>';
+  if (r && r.err) txt += '<br><span style="color:var(--bad)">⚠ ' + r.err + '</span>';
+  $('derive').innerHTML = txt;
+}
+
+/* ---- 输出 ---- */
+function render(frames, r){
+  var h = '<tr><th>帧</th><th>步首 (x,y)</th><th>档位</th><th>末 (x,y)</th><th>Δ</th><th>|v|</th>'+
+          '<th>状态</th><th>源数</th><th>净力</th><th class="l">物理步内逐步</th></tr>';
+  frames.forEach(function(f){
+    var cls = (f.ch==='TOI'||f.ch==='TOI+TOI') ? 'toi' : (f.ch==='REG' ? 'reg' : (f.ch==='EXIT' ? 'ccd' : 'free'));
+    var warn = (f.stopRadius && f.stopRadius.hit)
+      ? ' <span class="y" title="急停（判据 '+f.stopRadius.via+'）distA='+(f.stopRadius.distA||0).toFixed(4)+' / distB='+(f.stopRadius.distB||0).toFixed(4)+' ⇒ '+((f.stopRadius.cleared)?'清零速度':'多源 ⇒ 不清速度')+'（不 EndPull ⇒ 失衡持续到拉力结束）">⚠</span>' : '';
+    var nf = f.netForce ? ('(' + f.netForce.x.toFixed(2) + ',' + f.netForce.y.toFixed(2) + ')') : '—';
+    h += '<tr><td>'+f.k+'</td><td class="mono">'+f.x0.toFixed(6)+', '+f.y0.toFixed(6)+'</td>'+
+      '<td><span class="tag '+cls+'">'+(f.ch||'—')+'</span></td>'+
+      '<td class="mono">'+f.x1.toFixed(6)+', '+f.y1.toFixed(6)+'</td>'+
+      '<td class="mono">'+Math.hypot(f.x1-f.x0, f.y1-f.y0).toFixed(6)+'</td>'+
+      '<td class="mono">'+f.v.toFixed(4)+'</td><td>'+f.state+warn+'</td>'+
+      '<td class="mono">'+(f.srcCount==null?'—':f.srcCount)+'</td>'+
+      '<td class="mono">'+nf+'</td>'+
+      '<td class="l"><details><summary>展开 '+f.log.length+' 步'+(f.note?' ⚠':'')+'</summary><div class="steps">'+
+        (f.note? '<div style="color:var(--warn)">'+f.note+'</div>':'') +
+        f.log.map(renderSteps).join('') +
+      '</div></details></td></tr>';
+  });
+  $('frtbl').innerHTML = h;
+  drawTrack(frames);
+  var last = frames[frames.length-1];
+  $('summary').innerHTML = '共 ' + frames.length + ' 帧，终态 (' + last.x1.toFixed(6) + ', ' + last.y1.toFixed(6) + ')' +
+    (last.state === '非失衡' ? '　<span class="y">（已退出失衡）</span>' : '');
+}
+
+/* 渲染一条 log；带 trace（位置轮逐轮迭代）则展开成嵌套列表。
+   TOI 位置轮上限 20（甚至不收敛跑满）⇒ 前 8 轮展开，其余折叠。 */
+function renderSteps(l){
+  var h = '<div><b>' + l.t + '</b> — ' + l.d + '</div>';
+  if (l.trace && l.trace.length){
+    var SHOW = 8, head = l.trace.slice(0, SHOW), tail = l.trace.slice(SHOW);
+    var body = traceRows(head);
+    if (tail.length){
+      body += '<details class="tdtl"><summary>…再 ' + tail.length + ' 轮（共 ' + l.trace.length + ' 轮）</summary>' +
+              '<div class="tsub">' + traceRows(tail) + '</div></details>';
+    }
+    h += '<div class="tsub">' + body + '</div>';
+  }
+  return h;
+}
+function traceRows(tr){
+  var h = '';
+  tr.forEach(function(rd){
+    var rows = (rd.steps && rd.steps.length)
+      ? rd.steps.map(function(s){
+          var dir = (s.nx!==0 ? (s.nx>0?'+x':'−x') : (s.ny>0?'+y':'−y'));
+          return '<div class="trow"><span class="wtag">墙('+s.wall+')</span> ' +
+            '<span class="tdir">'+dir+'</span> 点'+s.point+
+            ' d='+s.d.toFixed(5)+' corr='+s.corr.toFixed(5)+
+            ' ⇒ ('+s.bx.toFixed(5)+', '+s.by.toFixed(5)+') → ('+s.ax.toFixed(5)+', '+s.ay.toFixed(5)+')</div>';
+        }).join('')
+      : '<div class="trow hint">本轮无有效接触点修正</div>';
+    h += '<div class="titer">轮 '+rd.iter+'【entryD='+rd.entryD.toExponential(2)+'，累计修正='+rd.corrSum.toFixed(5)+'】'+
+         (rd.corrSum<=0?'（mv=0 ⇒ break）': (rd.entryD<=0?'（entryD≤0 ⇒ break）':'')) + '</div>' + rows;
+  });
+  return h;
+}
+
+function run(){
+  var cfg = readCfg();
+  var r = SIM.simulate(cfg);
+  showDerive(cfg, r);
+  if (r.err){ $('frtbl').innerHTML=''; $('summary').innerHTML='<span class="r">'+r.err+'</span>'; return; }
+  window.__last = {cfg:cfg, r:r};
+  render(r.frames, r);
+}
+
+/* ---- 自检 ---- */
+function selftest(){
+  var res = SIM.runCases();
+  var h = '<tr><th class="l">用例</th><th>判定</th><th class="l">逐帧（期望 / 预测 / 偏差）/ 断言</th></tr>';
+  res.forEach(function(c){
+    h += '<tr><td class="l">'+c.name+'</td><td class="'+(c.pass?'pass':'fail')+'">'+(c.pass?'通过':'不通过')+(c.err?'（'+c.err+'）':'')+'</td><td class="l mono">';
+    (c.rows||[]).forEach(function(r){
+      var cls = (r.d<=1e-4)?'g':(r.d<=1e-3?'y':'r');
+      h += '<span class="'+cls+'">'+r.exp.toFixed(6)+' / '+(r.got==null?'—':r.got.toFixed(6))+' / '+r.d.toFixed(6)+'</span>　';
+    });
+    if (c.info) h += '<span class="hint">'+c.info+'</span>';
+    h += '</td></tr>';
+  });
+  $('selfbox').innerHTML = '<div class="card"><h2>自检结果</h2><table class="selftest">'+h+'</table>'+
+    '<div class="hint" style="margin-top:6px">判据：逐帧偏差 ≤ 1×10⁻⁴ 记通过。</div></div>';
+}
+
+/* ---- 实测对照 ---- */
+function compare(){
+  var lines = $('obs').value.trim().split('\n').map(function(s){ return s.split(',').map(Number); })
+    .filter(function(a){ return a.length>=3 && a.every(function(v){ return isFinite(v); }); });
+  if (!window.__last || !lines.length){ $('cmpout').textContent='先跑一次模拟，并粘贴数据'; return; }
+  var fr = window.__last.r.frames;
+  var off = (intv('cmpoff',1)) - 1;
+  var h = '<tr><th>实测帧</th><th>实测 x</th><th>预测 x</th><th>Δx</th><th>实测 y</th><th>预测 y</th><th>Δy</th></tr>';
+  var bad = 0;
+  lines.forEach(function(a){
+    var f = fr[a[0]-1+off];
+    if (!f) return;
+    var dx = Math.abs(a[1]-f.x1), dy = Math.abs(a[2]-f.y1);
+    var m = Math.max(dx,dy); if (m>1e-4) bad++;
+    var cls = m<=1e-4?'g':(m<=1e-3?'y':'r');
+    h += '<tr><td>'+a[0]+'</td><td class="mono">'+a[1]+'</td><td class="mono">'+f.x1.toFixed(6)+'</td>'+
+      '<td class="mono '+cls+'">'+dx.toExponential(2)+'</td><td class="mono">'+a[2]+'</td>'+
+      '<td class="mono">'+f.y1.toFixed(6)+'</td><td class="mono '+cls+'">'+dy.toExponential(2)+'</td></tr>';
+  });
+  $('cmptbl').innerHTML = h;
+  $('cmpout').innerHTML = lines.length + ' 行，超出 1e-4 的 ' + bad + ' 行';
+}
+
+/* ---- CSV ---- */
+function csv(){
+  if (!window.__last){ return; }
+  var rows = ['frame,x0,y0,channel,x1,y1,dx,|v|,state,srcCount,netFx,netFy,stopRadius'];
+  window.__last.r.frames.forEach(function(f){
+    rows.push([f.k, f.x0.toFixed(6), f.y0.toFixed(6), f.ch, f.x1.toFixed(6), f.y1.toFixed(6),
+      Math.hypot(f.x1-f.x0,f.y1-f.y0).toFixed(6), f.v.toFixed(6), f.state,
+      (f.srcCount==null?'':f.srcCount),
+      (f.netForce?f.netForce.x.toFixed(4):''), (f.netForce?f.netForce.y.toFixed(4):''),
+      (f.stopRadius&&f.stopRadius.hit?'1':'')].join(','));
+  });
+  var blob = new Blob([rows.join('\n')], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'unbalance_sim.csv'; a.click();
+}
+
+/* ---- 预设 ----
+   ★ 每个预设都先回默认再套用自己声明的字段（避免上一个预设的残留静默生效）。 */
+var FORM_DEFAULTS = { ml:3, cdmode:'1', mu:0.4, ff:1, spf:1, blade:'auto', maxf:60 };
+var PRESETS = {
+  sA:{ label:'情景A 竖直上推', walls:[[5,2],[6,2],[5,4]], start:{x:5,y:3.5},
+       events:[{kind:'pushProj', hitFrame:1, forceLevel:1, dirMode:'preset', ang:90,
+                forceSrc:{x:5,y:2}, effSrc:{x:5,y:2}}] },
+  sB:{ label:'情景B 墙心左右推', walls:[[5,2],[6,2],[5,4]], start:{x:5,y:4},
+       events:[{kind:'pushProj', hitFrame:1, forceLevel:1, dirMode:'preset', ang:180,
+                forceSrc:{x:5,y:2}, effSrc:{x:5,y:2}}] },
+  sC:{ label:'沿缝 (5.5,2.52) 下推', walls:[[5,4],[5,2],[6,2]], start:{x:5.5,y:2.52}, blade:0,
+       events:[{kind:'pushProj', hitFrame:1, forceLevel:2, dirMode:'preset', ang:270,
+                forceSrc:{x:5,y:2}, effSrc:{x:5,y:2}}] },
+  t1:{ label:'测试1/2 (5,3) 夹墙', walls:[[5,4],[5,2]], start:{x:5,y:3},
+       events:[{kind:'pushProj', hitFrame:1, forceLevel:2, dirMode:'preset', ang:270,
+                forceSrc:{x:5,y:2}, effSrc:{x:5,y:2}}] },
+  t4:{ label:'测试4 (5,3.5) 贴墙', walls:[[5,4],[5,2]], start:{x:5,y:3.5},
+       events:[{kind:'pushProj', hitFrame:1, forceLevel:1, dirMode:'preset', ang:180,
+                forceSrc:{x:5,y:2}, effSrc:{x:5,y:2}}] },
+  t5:{ label:'测试5 (5,4) 墙心', walls:[[5,4],[5,2],[6,2]], start:{x:5,y:4},
+       events:[{kind:'pushProj', hitFrame:1, forceLevel:1, dirMode:'preset', ang:180,
+                forceSrc:{x:5,y:2}, effSrc:{x:5,y:2}}] },
+  t3:{ label:'测试3 拉力', walls:[[5,4]], start:{x:5,y:3},
+       events:[{kind:'pull', hitFrame:1, forceLevel:2, dirMode:'link',
+                forceSrc:{x:5,y:5.5}, effSrc:{x:5,y:5.5}, duration:0, decay:true, expireStop:true}] },
+  /* ★ 「测试9」：干员在 (5,1) 朝上 ⇒ 拉拽原点（力源）(5,1.5)；
+     ★ 这里正好体现【效果源 ≠ 力源】：急停判据 B 以干员位置 (5,1) 为圆心、判据 A 以拉力终点 (5,1.5) 为圆心（本测例两者都未触发）。
+     时长 1.0 s = 30 帧；μ = 0.400；32 帧 max|Δy| = 3.9e-5。 */
+  t9:{ label:'测试9 缝内 2 级拉力', walls:[[5,4],[5,2],[6,2]], start:{x:5.5,y:2.52}, mu:0.4,
+       events:[{kind:'pull', hitFrame:1, forceLevel:2, dirMode:'link',
+                forceSrc:{x:5,y:1.5}, effSrc:{x:5,y:1}, duration:30, decay:true, expireStop:true}] },
+  /* ★ 「测试10」（急停判例）：敌人 (3,3) 被 2 级力拉向力源 (3,5.5)、效果源 (3,6)；
+     ★ 效果源 ≠ 力源：k=19 时判据 A（距终点 0.0418 ≤ 0.05）与判据 B（距干员 0.5418 ≤ 0.6708）同帧首次为真
+     ⇒ 清零速度、冻结（不再明显移动）至拉力到点。 */
+  t10:{ label:'测试10 急停判例', walls:[], start:{x:3,y:3},
+        events:[{kind:'pull', hitFrame:1, forceLevel:2, massLevel:2, dirMode:'link',
+                 forceSrc:{x:3,y:5.5}, effSrc:{x:3,y:6}, duration:30, decay:true, expireStop:true}] },
+  /* ★★ 序列预设（多力共存） */
+  q1:{ label:'★序列 双拉源', walls:[], start:{x:5,y:3},
+       events:[{kind:'pull', hitFrame:1, forceLevel:2, dirMode:'link',
+                forceSrc:{x:5,y:5.5}, effSrc:{x:5,y:5.5}, duration:10, decay:false, expireStop:true},
+               {kind:'pull', hitFrame:1, forceLevel:2, dirMode:'link',
+                forceSrc:{x:6.5,y:3}, effSrc:{x:6.5,y:3}, duration:20, decay:false, expireStop:true}] },
+  q2:{ label:'★序列 推 → 等 → 拉', walls:[], start:{x:5,y:3},
+       events:[{kind:'pushProj', hitFrame:1, forceLevel:1, dirMode:'preset', ang:0,
+                forceSrc:{x:7,y:3}, effSrc:{x:7,y:3}},
+               {kind:'pull', hitFrame:10, forceLevel:2, dirMode:'link',
+                forceSrc:{x:5,y:5.5}, effSrc:{x:5,y:5.5}, duration:20, decay:false, expireStop:true}] },
+  /* ★ 急停演示（已建模）：强拉力把敌人拉进【判据 B 急停半径 0.6708】内 ⇒ TryEarlyStopPull 清零速度一次 */
+  q7:{ label:'★急停 进急停半径0.6708⇒清速度', walls:[], start:{x:5,y:3},
+       events:[{kind:'pull', hitFrame:1, forceLevel:5, dirMode:'link',
+                forceSrc:{x:5,y:3.9}, effSrc:{x:5,y:3.9}, duration:60, decay:false, expireStop:true}] },
+  /* ★ 溅射降级演示：目标距效果源仅 0.2 格（< 0.25）⇒ 力度等级 −2 且方向被强制改为径向 */
+  sp:{ label:'★溅射降级 太近⇒径向', walls:[], start:{x:5,y:3},
+       events:[{kind:'pushProj', hitFrame:1, forceLevel:3, dirMode:'preset', ang:90, splash:true,
+                forceSrc:{x:5,y:3.2}, effSrc:{x:5,y:3.2}}] },
+  clear:{ label:'清空', walls:[], start:{x:5,y:3}, events:[] }
+};
+function renderPresets(){
+  $('presets').innerHTML = Object.keys(PRESETS).map(function(k){
+    return '<button data-p="'+k+'">'+PRESETS[k].label+'</button>';
+  }).join('');
+  Array.prototype.forEach.call($('presets').querySelectorAll('button'), function(b){
+    b.onclick = function(){ applyPreset(PRESETS[b.dataset.p]); };
+  });
+}
+function applyPreset(p){
+  var d = FORM_DEFAULTS;
+  walls = (p.walls || []).map(function(w){ return w.slice(); });
+  $('sx').value = p.start.x; $('sy').value = p.start.y;
+  $('ml').value = (p.ml != null) ? p.ml : d.ml;
+  $('cdmode').value = p.cdmode || d.cdmode;
+  $('mu').value = (p.mu != null) ? p.mu : d.mu;
+  $('ff').value = (p.ff != null) ? p.ff : d.ff;
+  $('spf').value = (p.spf != null) ? p.spf : d.spf;
+  $('blade').value = (p.blade != null) ? String(p.blade) : d.blade;
+  $('maxf').value = (p.maxf != null) ? p.maxf : d.maxf;
+  events = (p.events || []).map(function(e){
+    var o = newEvent(e.kind);
+    for (var k in e){
+      if (k === 'kind') continue;
+      if (k === 'forceSrc' || k === 'effSrc') o[k] = {x: e[k].x, y: e[k].y};
+      else o[k] = e[k];
+    }
+    if (!o.forceSrc) o.forceSrc = {x:o.effSrc.x, y:o.effSrc.y};
+    if (!o.effSrc)   o.effSrc   = {x:o.forceSrc.x, y:o.forceSrc.y};
+    return o;
+  });
+  selEv = events.length ? 0 : -1;
+  renderEvents(); draw(); refreshDerived(); syncCmpOff();
+}
+
+/* ---- 联动 ---- */
+function setPutMode(m){
+  putMode = m;
+  $('putEnemy').className   = (m === 'enemy')    ? 'on' : '';
+  $('putEff').className     = (m === 'effSrc')   ? 'on' : '';
+  $('putForce').className   = (m === 'forceSrc') ? 'on' : '';
+}
+function refreshDerived(){
+  var cur = (selEv >= 0 && events[selEv]) ? events[selEv] : null;
+  $('putHint').innerHTML = cur
+    ? '当前选中 <b>事件 #' + (selEv+1) + '（' + KIND_LABEL[cur.kind] + '）</b>'
+    : '<span class="y">先在序列里选中一个事件</span>';
+  $('putEff').disabled = !cur;
+  $('putForce').disabled = !cur;
+}
+function syncCmpOff(){
+  var f = Infinity;
+  events.forEach(function(e){ f = Math.min(f, firstDispFrame(e)); });
+  if (!isFinite(f)) f = 1;
+  $('cmpoff').value = f;
+  $('cmpoffHint').innerHTML = '实测第 1 帧对应模拟第 <b>' + f + '</b> 帧（按最早事件的首次位移帧推算，可手改）';
+}
+
+/* ---- 绑定 ---- */
+$('map').addEventListener('click', function(e){
+  if (e.target.classList.contains('cell')) return;
+  // ★ 地图是 viewBox 等比缩放的（窄屏铺满列宽）⇒ 必须换算到 SVG 用户坐标再反推格子。
+  //   不能再拿 getBoundingClientRect 的像素差直接除 CELL —— 那样只在 1:1 显示时才对，缩放后整体错格。
+  //   退化保障：getScreenCTM 不可用时，按「显示宽度 / 逻辑宽度」线性缩放估算。
+  var svg = $('map'), pt = svg.createSVGPoint(), wx, wy;
+  pt.x = e.clientX; pt.y = e.clientY;
+  var m = svg.getScreenCTM();
+  if (m){
+    var u = pt.matrixTransform(m.inverse());
+    wx = u.x; wy = u.y;
+  } else {
+    var rect = svg.getBoundingClientRect();
+    var k = rect.width / (W * CELL) || 1;
+    wx = (e.clientX - rect.left) / k; wy = (e.clientY - rect.top) / k;
+  }
+  var x = Math.round((wx / CELL - 0.5)*2)/2;
+  var y = Math.round((H - 0.5 - wy / CELL)*2)/2;
+  if (putMode === 'effSrc' || putMode === 'forceSrc'){
+    if (selEv < 0 || !events[selEv]) return;
+    if (putMode === 'effSrc') events[selEv].effSrc = {x:x, y:y};
+    else                      events[selEv].forceSrc = {x:x, y:y};
+    renderEvents(); draw();
+  } else {
+    $('sx').value = x; $('sy').value = y;
+    draw(); renderEvents();                 // 敌人位置影响「由力源计算」的方向显示
+  }
+});
+$('putEnemy').onclick = function(){ setPutMode('enemy'); };
+$('putEff').onclick   = function(){ setPutMode('effSrc'); };
+$('putForce').onclick = function(){ setPutMode('forceSrc'); };
+$('run').onclick = run;
+$('selftest').onclick = selftest;
+$('csv').onclick = csv;
+$('cmp').onclick = compare;
+function addEv(kind){ events.push(newEvent(kind)); selEv = events.length-1; renderEvents(); draw(); syncCmpOff(); }
+$('addProj').onclick   = function(){ addEv('pushProj'); };
+$('addDirect').onclick = function(){ addEv('pushDirect'); };
+$('addPull').onclick   = function(){ addEv('pull'); };
+
+/* 事件表的编辑：点击 = 选中/删除；change = 写回模型（不整表重渲染，免得打字时丢焦点） */
+$('evtbl').addEventListener('click', function(ev){
+  var tr = ev.target.closest ? ev.target.closest('tr') : null;
+  if (!tr || tr.dataset.i == null) return;
+  var i = parseInt(tr.dataset.i);
+  if (ev.target.dataset.act === 'del'){
+    events.splice(i, 1);
+    if (selEv >= events.length) selEv = events.length - 1;
+    renderEvents(); draw(); syncCmpOff();
+    return;
+  }
+  if (ev.target.tagName === 'SELECT' || ev.target.tagName === 'INPUT') return;   // 编辑控件不切选中
+  if (selEv !== i){ selEv = i; renderEvents(); draw(); }
+});
+$('evtbl').addEventListener('change', function(ev){
+  var tr = ev.target.closest ? ev.target.closest('tr') : null;
+  if (!tr || tr.dataset.i == null) return;
+  var i = parseInt(tr.dataset.i), e = events[i], f = ev.target.dataset.f;
+  if (!e || !f) return;
+  var v = ev.target.value, structural = false, needDraw = false;
+  if (f === 'kind'){
+    e.kind = v;
+    if (v === 'pull' && !e.dirMode) e.dirMode = 'link';
+    structural = true;
+  }
+  else if (f === 'hitFrame'){ e.hitFrame = Math.max(0, intv0(v)); syncCmpOff(); }
+  else if (f === 'forceLevel'){ e.forceLevel = Math.max(0, intv0(v)); }
+  else if (f === 'dirMode'){ e.dirMode = v; structural = true; }
+  else if (f === 'ang'){ e.ang = parseFloat(v) || 0; structural = true; }   // ★ 方向改后必须重渲表格+重画地图
+  else if (f === 'effx'){ e.effSrc.x = parseFloat(v); needDraw = true; }
+  else if (f === 'effy'){ e.effSrc.y = parseFloat(v); needDraw = true; }
+  else if (f === 'fsx'){ e.forceSrc.x = parseFloat(v); needDraw = true; }
+  else if (f === 'fsy'){ e.forceSrc.y = parseFloat(v); needDraw = true; }
+  else if (f === 'duration'){ e.duration = Math.max(0, intv0(v)); }
+  else if (f === 'decay'){ e.decay = (v === '1'); }
+  else if (f === 'expireStop'){ e.expireStop = (v === '1'); }
+  else if (f === 'splash'){ e.splash = (v === '1'); }
+  if (structural) renderEvents(); else refreshDerived();
+  if (needDraw || structural) draw();
+  // 「由力源计算」的方向随力源/敌人位置变化 ⇒ 重渲染该列
+  if (!structural && (f === 'fsx' || f === 'fsy' || f === 'dirMode')) renderEvents();
+});
+/* 坐标类输入 ⇒ 刷新地图 + 事件表（方向列依赖敌人位置）+ 派生显示 */
+['sx','sy'].forEach(function(id){
+  $(id).addEventListener('input', function(){ draw(); renderEvents(); });
+  $(id).addEventListener('change', function(){ draw(); renderEvents(); });
+});
+/* 其余参数：只刷派生显示，★ 不自动重跑（避免改动中途污染上一轮已对照过的结果） */
+['ml','cdmode','mu','ff','spf','maxf','blade'].forEach(function(id){
+  $(id).addEventListener('input', refreshDerived);
+  $(id).addEventListener('change', refreshDerived);
+});
+
+/* ---- 初始化 ---- */
+renderPresets();
+applyPreset(PRESETS.sA);
+run();
+/* 自检按钮上的用例数从 CASES 现算，免得加了用例忘了改文案 */
+$('selftest').textContent = '一键自检（' + SIM.CASES.length + ' 套标定）';
+</script>
+</body>
+</html>

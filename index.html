@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>明日方舟数据工具</title>
+<meta name="theme-color" content="#16181d">
+<meta name="description" content="明日方舟客户端数据工具集：波次帧账分析器、失衡位移逐帧模拟器。纯静态、零依赖、手机可用。">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#16181d; --card:#1d2026; --bd:#2b2f37; --bd2:#39404b;
+  --tx:#e8e8e6; --tx2:#a8adb8; --tx3:#767c88;
+  --acc:#4ca3f0; --accbg:#16283a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+  padding:max(env(safe-area-inset-top),0px) 0 max(env(safe-area-inset-bottom),0px)}
+.wrap{max-width:760px;margin:0 auto;padding:26px 16px 40px}
+header{margin-bottom:22px}
+h1{font-size:20px;font-weight:600;margin:0 0 6px}
+.sub{color:var(--tx2);font-size:13px}
+.grid{display:grid;gap:12px}
+a.card{display:block;text-decoration:none;color:inherit;background:var(--card);
+  border:1px solid var(--bd);border-radius:12px;padding:16px 17px;transition:border-color .15s,transform .15s}
+a.card:hover,a.card:focus-visible{border-color:var(--acc);transform:translateY(-1px);outline:none}
+a.card h2{font-size:16px;font-weight:600;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+a.card h2 .go{margin-left:auto;color:var(--acc);font-size:14px;font-weight:400}
+a.card p{margin:0;color:var(--tx2);font-size:13px}
+.tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:11px;color:var(--tx3);border:1px solid var(--bd2);border-radius:99px;padding:2px 9px}
+footer{margin-top:26px;color:var(--tx3);font-size:12px;border-top:1px solid var(--bd);padding-top:14px}
+footer code{font-family:ui-monospace,Consolas,monospace;color:var(--tx2)}
+.notice{margin-top:12px;color:var(--tx3);font-size:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>明日方舟数据工具</h1>
+    <div class="sub">纯静态、零依赖、手机浏览器可用。点开即用，不需要安装。</div>
+  </header>
+
+  <div class="grid">
+    <a class="card" href="wave/">
+      <h2>波次帧账分析器 <span class="go">打开 →</span></h2>
+      <p>把一关的出怪拆成逐帧账：泳道式时间轴、逐条目账、出怪时刻表，可导出 Markdown。
+         支持导入自己手上的关卡 JSON。</p>
+      <div class="tags">
+        <span class="tag">时间轴</span>
+        <span class="tag">逐条目账</span>
+        <span class="tag">出怪时刻表</span>
+        <span class="tag">费用条口径</span>
+      </div>
+    </a>
+
+    <a class="card" href="unbalance/">
+      <h2>失衡位移逐帧模拟器 <span class="go">打开 →</span></h2>
+      <p>复现物理步，逐步对照失衡位移：地形编辑、施力事件序列（弹道推力 / 非弹道推力 / 拉力）、
+         与实测逐帧比对、导出 CSV。</p>
+      <div class="tags">
+        <span class="tag">物理模拟</span>
+        <span class="tag">施力序列</span>
+        <span class="tag">实测对照</span>
+        <span class="tag">导出 CSV</span>
+      </div>
+    </a>
+  </div>
+
+  <footer>
+    <div>构建于 <code id="stamp">2026-10-09 23:18</code></div>
+    <div class="notice">
+      本页只托管完全独立运行的静态页面，<b>不含</b>游戏本体资源（美术 / 音频 / 脚本代码）。<br>
+      工具用到的映射数据（单位名、延迟、关名、箱型常量）取自客户端配置数据，随游戏版本更新。
+    </div>
+  </footer>
+</div>
+</body>
+</html>
