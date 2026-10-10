@@ -992,11 +992,14 @@ function simulate(cfg) {
     }
 
     // ③ pushProj：OnTick 之后施冲量（命中帧即失衡 + 刷硬直窗；该帧物理步即成位移）
+    //   ★ 同帧多份推 ⇒ 冲量【矢量相加】进速度（不是后者覆盖前者）：
+    //     游戏侧每个命中各自派发 KnockBack → AddForce(impulse, ForceMode2D.Impulse)，
+    //     而 Impulse 是【加性】写速度 ⇒ 同帧 N 份 = Σ Δv。逐份累加即可（首份等价于旧「写 velocity」）。
     for (ei = 0; ei < events.length; ei++) {
       var ep = events[ei];
       if (ep._dead || ep.kind !== 'pushProj' || ep._hit !== k) continue;
-      st.vx = ep._dir.x * ep._forceVal;
-      st.vy = ep._dir.y * ep._forceVal;
+      st.vx += ep._dir.x * ep._forceVal;
+      st.vy += ep._dir.y * ep._forceVal;
       isUnbalanced = true;
       refreshProtect(k);
     }
@@ -1117,15 +1120,17 @@ function simulate(cfg) {
     }
 
     // ⑤ 帧末 (b) pushDirect：本帧末施冲量 ⇒ 次帧生效（且先经线性摩擦）+ 登记失衡 + 刷硬直窗
+    //   ★ 与 ③ 同源（都是 KnockBack 的 Impulse）⇒ 同为【加性】：同帧多份相加，
+    //     且本帧物理步已过 ⇒ 本帧位移不含它，但帧末记的 |v| 已含（次帧先摩擦再积分）。
     for (ei = 0; ei < events.length; ei++) {
       var ed = events[ei];
       if (ed._dead || ed.kind !== 'pushDirect' || ed._hit !== k) continue;
-      st.vx = ed._dir.x * ed._forceVal;
-      st.vy = ed._dir.y * ed._forceVal;
+      st.vx += ed._dir.x * ed._forceVal;
+      st.vy += ed._dir.y * ed._forceVal;
       isUnbalanced = true;
       refreshProtect(k);
       allLog.push({ t: '· 非弹道推（协程阶段 · 物理步之后）',
-        d: 'AddForce(impulse=' + ed._forceVal.toFixed(3) + ', ForceMode2D.Impulse) ⇒ 立即写 velocity；本帧物理步已过 ⇒ 位移从 k=' +
+        d: 'AddForce(impulse=' + ed._forceVal.toFixed(3) + ', ForceMode2D.Impulse) ⇒ 加性写 velocity（同帧多份相加）；本帧物理步已过 ⇒ 位移从 k=' +
            (k + 1) + ' 起（且该帧先经 OnTick 线性摩擦）；★ KnockBack 不登记 pull 源 ⇒ 不延长失衡' });
     }
 
@@ -1512,6 +1517,27 @@ var CASES = [
       return {pass: Math.abs(r.forceVal - full) < 1e-12,
         info:'方向与径向同向 ⇒ 不降级；力度=' + r.forceVal + '（期望 ' + full + '）'};
     } },
+  // 10) ★ 同帧多推【合力】（修订）：推 —— 不论弹道（步骤 ③）还是非弹道（步骤 ⑤b）——
+  //     游戏侧都是 KnockBack → AddForce(impulse, ForceMode2D.Impulse)，而 Impulse 是【加性】写速度
+  //     ⇒ 同帧 N 份 = Σ Δv，不是「后者覆盖前者」。
+  //     ★ 判别点：帧 1 末 |v| 必须 = Σ 各份 Δv（旧模型 = 最后一份 ⇒ 本用例红）。
+  //       参数取自实机复现：3 份弹道推（力级 3/1/1）+ 1 份非弹道推（力级 1），重量级 2。
+  { name:'序列10 · 同帧多推合力（3 弹道推 + 1 非弹道推 ⇒ 冲量矢量相加）', axis:'y',
+    cfg:{walls:[], start:{x:5,y:3.2}, maxFrames:4,
+         forces:[
+           {kind:'pushProj',   hitFrame:1, forceLevel:3, massLevel:2, dirMode:'preset', dir:{x:0,y:1}, src:{x:5,y:2}, effSrc:{x:5,y:2}},
+           {kind:'pushProj',   hitFrame:1, forceLevel:1, massLevel:2, dirMode:'preset', dir:{x:0,y:1}, src:{x:5,y:2}, effSrc:{x:5,y:2}},
+           {kind:'pushProj',   hitFrame:1, forceLevel:1, massLevel:2, dirMode:'preset', dir:{x:0,y:1}, src:{x:5,y:2}, effSrc:{x:5,y:2}},
+           {kind:'pushDirect', hitFrame:1, forceLevel:1, massLevel:2, dir:{x:0,y:1}, src:{x:5,y:2}, effSrc:{x:5,y:2}}
+         ]},
+    check:function(r){
+      var sum = 0, mx = 0;
+      (r.events||[]).forEach(function(e){ sum += e._forceVal; mx = Math.max(mx, e._forceVal); });
+      var v1 = r.frames[0] ? r.frames[0].v : NaN;
+      return {pass: Math.abs(v1 - sum) < 1e-9 && sum > mx + 1e-9,
+        info:'Σ Δv=' + sum.toFixed(4) + '（最大单份 ' + mx.toFixed(4) + '）⇒ 帧 1 末 |v|=' + v1.toFixed(4) +
+             '（期望 = Σ Δv；若 = 单份 ⇒ "后者覆盖"回归）'};
+    } },
 ];
 
 /* ★★ 机制覆盖度登记表 ——
@@ -1576,6 +1602,16 @@ var MECH = [
   { key:'splashRadial', name:'溅射降级（太近/太歪 ⇒ 力度−2 且方向强制改径向）',
     hint:'需要 push 事件 + splash 开 + 「太近」(≤0.25 格) 或「方向 4 方向量化不符」(如 序列8 / 序列9)',
     active:function(r){ return (r.events||[]).some(function(e){ return e._splashHit; }); } },
+  { key:'multiPush', name:'同帧多推合力（冲量矢量相加进速度，不是后者覆盖）',
+    hint:'需要两个以上推事件落在同一命中帧（如 序列10）',
+    active:function(r){
+      var n = {};
+      (r.events||[]).forEach(function(e){
+        if (e._dead || e.kind === 'pull') return;
+        n[e._hit] = (n[e._hit] || 0) + 1;
+      });
+      return Object.keys(n).some(function(kk){ return n[kk] > 1; });
+    } },
 ];
 
 function runCases() {
@@ -1933,10 +1969,11 @@ function showDerive(cfg, r){
       '⇒ 力度等级 −2 且<b>方向强制改为径向</b>（效果源 → 敌人）。' +
       (near.length ? '；<span class="y">当前有 ' + near.length + ' 个事件满足「太近」</span>' : '') + '</span><br>';
   }
-  if (events.length > 1){
-    var order = events.slice().sort(function(a,b){ return a.hitFrame - b.hitFrame; });
+  if (cfg.forces.length > 1){
+    var order = cfg.forces.slice().sort(function(a,b){ return a.hitFrame - b.hitFrame; });
     txt += '<span class="hint">多力并存：最早施力 = 事件 #' + (order[0].sourceId+1) + '（命中帧 ' + order[0].hitFrame + '）；' +
-      '各力矢量相加进同一力累加器，线性摩擦每帧只削一次。</span><br>';
+      '同帧多份力按<b>矢量相加</b>（推 = 各冲量相加进速度、同帧一次积分；拉 = 各力矢量相加进同一力累加器），' +
+      '线性摩擦每帧只削一次。</span><br>';
   }
   txt += '<hr style="border:0;border-top:1px solid var(--bd);margin:8px 0">' +
     '<b>退出条件</b>：<span class="mono">|v| ≤ 0.1</span> 且硬直窗已过 <b>且 在册拉源数 = 0</b> ⇒ 关箱冻结。' +
