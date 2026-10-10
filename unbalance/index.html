@@ -1626,6 +1626,25 @@ var CASES = [
              '（墙 (4,3) 核心 [3.5,4.5]，期望停在 4.605）⇒ ' +
              (ok ? '被 TOI 拦下（正确）' : '★ 穿墙（回归！）') };
     } },
+  /* ★★ 离散型对照（同几何、同力度，只把 collisionDetection 改成 Discrete）：
+     引擎侧：离散型不是 bullet ⇒ 它的接触进【数组 A】，而 TOI 只扫【数组 B】
+     ⇒ 完全没有 CCD；常规 Solve 只用【步首冻结的 manifold】，步首离墙远 ⇒ 无约束
+     ⇒ 位移全额生效 ⇒ 必穿墙。依据见物理分册 02 §2.1（分流位语义 = CCD 资格）与 04（建岛用 A + B）。
+     ★ 判别点：与「扫掠穿越」逐项对照 —— 同 cfg 只差 continuous ⇒ 一个停在墙外、一个穿过去。 */
+  { name:'离散型对照 · (5,3) 同帧 10 份 2 级推向左（Discrete ⇒ 必穿墙）', axis:'x',
+    cfg:{walls:[[4,3]], start:{x:5,y:3}, maxFrames:3, stunned:true, continuous:false, forces:(function(){
+      var F = [], i;
+      for (i = 0; i < 10; i++) F.push({ kind:'pushProj', hitFrame:1, forceLevel:2, massLevel:0,
+        dirMode:'preset', dir:{x:-1,y:0}, src:{x:5,y:2}, effSrc:{x:5,y:2} });
+      return F;
+    })()},
+    check:function(r){
+      var f1 = r.frames[0];
+      var ok = !!f1 && f1.ch.indexOf('TOI') < 0 && f1.x1 < 3.5;
+      return { pass: ok,
+        info:'帧 1 通道=' + (f1 ? f1.ch : '—') + '、末 x=' + (f1 ? f1.x1.toFixed(6) : '—') +
+             '（墙 (4,3) 核心 [3.5,4.5]）⇒ ' + (ok ? '穿到墙左侧（Discrete 正确行为）' : '被拦住了（★ 不该）') };
+    } },
 ];
 
 /* ★★ 机制覆盖度登记表 ——
@@ -1703,6 +1722,10 @@ var MECH = [
   { key:'sweptPassThrough', name:'扫掠 AABB 成对 + 见证轴求根（一帧自由位移 > 墙格宽时 TOI 仍拦得住）',
     hint:'需要"单帧自由位移 > 1 格"的用例（同帧多份推 + 轻重量 ⇒ 如 扫掠穿越）',
     active:function(r){ return (r.frames||[]).some(function(f){ return (f.sweptOnly||0) > 0; }); } },
+  { key:'cdDiscrete', name:'离散型（collisionDetection=Discrete）完全没有 CCD ⇒ 够快就穿墙',
+    hint:'需要 continuous=false + 单帧自由位移 > 墙格宽（如 离散型对照）',
+    active:function(r){ return (r.frames||[]).some(function(f){
+      return Math.abs(f.x1 - f.x0) > 1.0 && f.ch.indexOf('TOI') < 0; }); } },
 ];
 
 function runCases() {
