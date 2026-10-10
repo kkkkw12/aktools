@@ -265,6 +265,11 @@ table.evtbl td select{padding:2px 3px}
 /* ============================================================
    失衡位移模拟核心（无 DOM 依赖，可被 Node 直接 eval 做自检）
    依据：物理模拟步逐项还原；常量取自客户端 Physics2DSettings
+   ★ 与物理分册新结论核对（三项，机制依据见 物理分册 02 §1.1 / 06 §7 / 07 §2.1）：
+     ① CCD 状态闸门 —— 只有 touching 才产生 TOI 事件；步首核心已重叠 ⇒ 本条弃权（走常规轮）。
+     ② 宽相代理 AABB = 【扫掠 AABB】（起点位姿 ∪ 当前位姿）⇒ 直线路径穿过的墙格必成对。
+     ③ 线速度限幅阈值 = 系数² ⇒ 每步位移硬上限 100 格（游戏内不可达）。
+     ⇒ ①③ 原有口径已与引擎一致；② 本轮改为"两个位姿取并集 + SolveTOI 期间集合冻结"。
    ============================================================ */
 var SIM = (function () {
 'use strict';
@@ -281,7 +286,11 @@ var K = {
   velIters: 8,
   toiWin: 0.09625,     // target + tolerance
   toiTarget: 0.095,
+  toiTol: 0.00125,     // tolerance = 0.25·slop（粒度用，不是求根阈值）
   maxCorr: 0.2,
+  maxTrans: 100,       // ★ 线速度限幅目标：|v·dt| > 阈值 ⇒ v *= 100/|v·dt|（每步位移上限 100 格）
+  maxTransSq: 10000,   // ★ 限幅阈值 = 系数²（= 100²）；引擎里由 系数×系数 求出，不是独立常量
+                       //   依据：物理分册 06 §7 结案条（阈值已从引擎读出）
   minSpd: 0.1,
   protectFrames: 4,
   mass: 1,
@@ -480,12 +489,21 @@ function minCdAt(px, py, walls) {
    依据（实测）：
      · 宽相外扩常量 = 0.1（建代理时 lowerBound − 0.1 / upperBound + 0.1）
      · UpdatePairs 用 fat AABB 查询 —— 外扩的理由就是"现在没碰上、这一帧内可能碰上"
-   敌人 fat AABB = 紧 AABB [x−0.1,x+0.1]×[y−0.3,y+0.1] 再 ±0.1 ⇒ [x−0.2,x+0.2]×[y−0.4,y+0.2]
-   墙   fat AABB = 格 ±(0.5 + 0.01 contactOffset + 0.1)   = 格 ±0.61
-   ⚠ 注意：这里的 0.1 与 contactOffset(0.01) 无关，是宽相自己的外扩常量。 */
-function pairsAt(px, py, walls) {
-  var fx0 = px - K.capR - 0.1, fx1 = px + K.capR + 0.1;
-  var fy0 = py - K.capH - K.capR - 0.1, fy1 = py + K.capR + 0.1;
+     · ★ 代理 AABB 是【扫掠 AABB】：用「起点位姿」与「当前位姿」各算一次 AABB，再逐轴
+       min/max 合并 ⇒ 覆盖整段位移，不是"当前位置的 AABB"。纯平移（无旋转）下
+       「起点 AABB ∪ 终点 AABB」恰好 = 整段扫掠的 AABB ⇒ 直线路径穿过的墙格
+       【必成对】，与速度无关。
+     · 会漏的两条：有旋转的实体（只取两端位姿）；本步之内才启用/新建的碰撞形状
+       （尚无代理 ⇒ 同步函数直接返回，且本步成对时机已过）。本工具都不涉及。
+     · 接触集合在整个 TOI 阶段【冻结】—— 数组是常规步末尾建的，TOI 内部不重跑宽相。 */
+function fatBox(px, py) {
+  return { x0: px - K.capR - 0.1, x1: px + K.capR + 0.1,
+           y0: py - K.capH - K.capR - 0.1, y1: py + K.capR + 0.1 };
+}
+function pairsAt(x0, y0, x1, y1, walls) {
+  var a = fatBox(x0, y0), b = fatBox(x1, y1);
+  var fx0 = Math.min(a.x0, b.x0), fx1 = Math.max(a.x1, b.x1);
+  var fy0 = Math.min(a.y0, b.y0), fy1 = Math.max(a.y1, b.y1);
   var out = [], i;
   for (i = 0; i < walls.length; i++) {
     var w = walls[i];
@@ -496,6 +514,19 @@ function pairsAt(px, py, walls) {
   return out;
 }
 
+/* 单元断言：宽相成对 = 扫掠口径（把 pairsAt 钉死在"两端取并集"上，改动即红）。
+   ⚠ 更正（同日发现）：先前在本注释里写过"该机制在游戏可达力度下不可被激活"——**错了**。
+   同帧多份推是【加性】冲量（见 CASES 序列10），N 份 2 级推（重量级 0）⇒ Δv = 5.3·N
+   ⇒ 单帧自由位移 = 0.177·N 格 ⇒ **N ≥ 2 就够**让"步首 fat 窗口外、扫掠路径上"的墙出现。
+   该机制真实可达 ⇒ 已登记进 MECH（key = sweptPassThrough），由 CASES「扫掠穿越」激活。 */
+function pairWindowCheck() {
+  var walls = [[6, 3]];
+  var one = pairsAt(5.0, 3.0, 5.0, 3.0, walls).length;   // 单点位姿：|5.0−6.0| = 1.0 > 0.81 ⇒ 0
+  var swp = pairsAt(5.0, 3.0, 5.5, 3.0, walls).length;   // 扫掠到 5.5 ⇒ 并集覆盖墙 fat ⇒ 1
+  var far = pairsAt(4.0, 3.0, 4.2, 3.0, walls).length;   // 整段都够不到 ⇒ 0
+  return { ok: (one === 0 && swp === 1 && far === 0), one: one, swp: swp, far: far };
+}
+
 /* ---------- 单条 contact 的 TOI 裁决 ----------
    扫描区间 = sweep c0 → c：★【含常规 Solve 的位置修正位移，不是只扫 v·dt】（:693-694）
        d0 ≤ 0                    ⇒ e_overlapped        ⇒ alpha = 1（本条不产生事件，:706-708）
@@ -503,7 +534,16 @@ function pairsAt(px, py, walls) {
        d0 ≥ target+tol           ⇒ 沿 c0→c 求 cd 降到【target = 0.095】的根（:410-433）
                                     （★ tolerance 只做迭代停止判据，不是求根阈值 ——
                                       ★ 测试 2 帧 9 实测 3.403800 反证：根在 0.095，不在 0.09625）
-                                    全程未降到 target ⇒ alpha = 1 */
+                                    终态仍 > target+tol ⇒ alpha = 1（e_separated）
+   ★★ 修正（模拟器侧 bug，非文档问题）：
+    旧实现用【终点的几何最近距离】判"有没有撞上"（`manifoldAt(x1,y1).cd >= target ⇒ 无事件`），
+    这**隐含假设 cd 沿扫掠单调** —— 而"整只穿过去"（一帧位移 > 墙格宽）时终点 cd 又变大，
+    ⇒ 被误判成"全程没撞上" ⇒ **穿墙**。
+    引擎的判据不是终点几何距离，而是【沿步首见证轴的一维分离函数 s(t)】：
+      纯平移下 s(t) 是 t 的一次函数 ⇒ s(1) 会随"穿过去"变成负值 ⇒ 不看终点几何距离，
+      而是 s(1) > target+tol 才判 e_separated。见物理分册 07 §3。
+    ⚠ 近似度：本实现只做引擎的【首轮】（见证轴 + 基准点冻结在步首）；引擎此后还会按新的
+      最小分离见证点复选几次（bounded by 顶点数）。胶囊 vs 墙格（面/角两类）下首轮即定案。 */
 function toiAlphaOf(x0, y0, x1, y1, wall) {
   var m0 = manifoldAt(x0, y0, wall);
   var d0 = m0.cd;
@@ -516,13 +556,20 @@ function toiAlphaOf(x0, y0, x1, y1, wall) {
     return { a: 0, cls: '刀锋·核心相切 ⇒ e_touching@α=0（触发）' };
   }
   if (d0 < K.toiWin) return { a: 0, cls: 'e_touching@α=0（0<cd<0.09625）' };
-  if (manifoldAt(x1, y1, wall).cd >= K.toiTarget) return { a: 1, cls: '未降到 target=0.095 ⇒ 无事件' };
-  var lo = 0, hi = 1, i;
-  for (i = 0; i < 40; i++) {
-    var mid = (lo + hi) / 2;
-    if (manifoldAt(x0 + (x1 - x0) * mid, y0 + (y1 - y0) * mid, wall).cd > K.toiTarget) lo = mid; else hi = mid;
-  }
-  return { a: (lo + hi) / 2, cls: '扫掠求根（c0→c 全位移，阈值 target=0.095）' };
+  // ③ 扫掠求根：沿【步首见证轴 + 步首 planePoint】的一维分离函数（纯平移下对 t 线性）
+  //    s(t) = s0 + t·(s1 − s0)；s0 = d0（核心测度，= 两 cap 取小）
+  //    ⚠★ s1 必须对**两个 cap 圆心**取小（= 引擎 FindMinSeparation 对形状顶点取 min），
+  //       不能拿"实体原点"代入 —— 胶囊的 cap 圆心比原点低 capH(0.2)，纵向推时会差 0.2 ⇒ 假 e_separated。
+  var nx = m0.n.x, ny = m0.n.y, pp = m0.planePoint;
+  var s1u = (x1 - pp.x) * nx + (y1 - pp.y) * ny;
+  var s1l = (x1 - pp.x) * nx + ((y1 - K.capH) - pp.y) * ny;
+  var s1 = Math.min(s1u, s1l);
+  if (s1 > K.toiTarget + K.toiTol)
+    return { a: 1, cls: 'e_separated（s(1) > target+tol ⇒ 终态仍分离）' };
+  var a = (d0 - K.toiTarget) / (d0 - s1);
+  if (!isFinite(a) || !(a > 0)) a = 0;                 // 步首已在 target 内 ⇒ α=0（立刻起效）
+  if (a > 1) a = 1;
+  return { a: a, cls: '扫掠求根（沿步首见证轴求 s(t)=target=0.095）' };
 }
 
 /* ---------- 速度约束（法向归零 + ★切向摩擦） ----------
@@ -641,7 +688,7 @@ function sweepAlpha(x0, y0, dx, dy, walls) {
 
 /* ---------- SolveTOI 子步循环（for(;;)） ----------
    输入：步首位姿 (x0,y0) = sweep 起点 c0；常规 Solve 末位姿 (cx,cy) = sweep 终点 c
-   每子步：① 扫描 pairsAt 的全部 contact，逐条算 α（每子步重算）
+   每子步：① 扫描【冻结的】接触集合（α 每子步重算，但**不重跑宽相**）
            ② 取 α 最小者（严格小于 ⇒ 先扫描到的胜）为 minContact；α≥1 或 toiCount>8 跳过
            ③ Advance(α)：位置 = c0 + α(c − c0)
            ④ 建岛 = [minContact, 邻居…]（引擎数组序，不排序）；位置解 0.75×≤20
@@ -653,9 +700,20 @@ function toiSubSteps(x0, y0, cx, cy, walls, cfg, log) {
   // pos = 当前位姿（无事件时 = 常规 Solve 末位姿 c）
   var toiCount = {}, s0 = { x: x0, y: y0 }, pos = { x: cx, y: cy };
   var steps = 0, lastTrace = null, rows = [], guard = 0, first = true, alpha1 = null;
+  // ★★ 修正：接触集合【建一次、整段冻结】——引擎的接触数组是常规 Solve 末尾
+  //   （宽相同步之后）建的那一次，SolveTOI 内部**不重跑宽相**。
+  //   口径 = 扫掠 AABB（步首 c0 ∪ 常规步末 c）⇒ 见 pairsAt 的注释。
+  var prs = pairsAt(x0, y0, cx, cy, walls);
+  // ★ 覆盖度标记：只在【扫掠并集】里、不在【步首单点位姿】里的 contact 数。
+  //   > 0 ⇒ "扫掠 AABB 才成对"这条机制本帧真的起了作用（供机制覆盖度闸门判定）。
+  var sweptOnly = 0;
+  (function () {
+    var base = {}, base0 = pairsAt(x0, y0, x0, y0, walls), i2;
+    for (i2 = 0; i2 < base0.length; i2++) base[base0[i2][0] + ',' + base0[i2][1]] = 1;
+    for (i2 = 0; i2 < prs.length; i2++) if (!base[prs[i2][0] + ',' + prs[i2][1]]) sweptOnly++;
+  })();
   for (;;) {
     if (++guard > 200) break;                       // 安全上限（真实上限 = Σ(每接触 toiCount+1)）
-    var prs = pairsAt(s0.x, s0.y, walls);
     // ★ 扫掠终点：第 1 子步 = 常规 Solve 末位姿 c（c0→c 全位移，含位置修正）
     //   第 2 子步起 = 上一子步岛解结果 + dt_sub·v（子步尾部的位置积分
     //   写 body.c；故 sweep = [c0, 上一子步结果 + 积分量]，量级 = dt·v）。
@@ -700,7 +758,7 @@ function toiSubSteps(x0, y0, cx, cy, walls, cfg, log) {
     log.push({ t: '\u2462 SolveTOI 子步循环（共 ' + steps + ' 个有效子步）',
       d: rows.join('<br>'), trace: lastTrace });
   }
-  return { x: pos.x, y: pos.y, steps: steps, alpha1: (alpha1 === null ? 0 : alpha1) };
+  return { x: pos.x, y: pos.y, steps: steps, alpha1: (alpha1 === null ? 0 : alpha1), sweptOnly: sweptOnly };
 }
 
 /* ---------- 一个物理步（严格按引擎步进顺序） ---------- */
@@ -749,6 +807,13 @@ function step(st, cfg) {
   var vs0 = velSolve(st, mfs0, (cfg.mu == null) ? K.mu : cfg.mu);
   var muSum = vs0.mu;                  // ★ 本步内切向摩擦吃掉的速度总量（供「覆盖度自检」）
   log.push({ t: '\u2462 常规 Solve \u00b7 速度轮 \u00d7' + K.velIters, d: vs0.notes.length ? vs0.notes.join('\uff1b') : '\u65e0\u63a5\u89e6' });
+  // ★★ 补：线速度限幅（引擎在【速度约束之后、位置积分之前】做，本行位置同）——
+  //   s = |v·dt|²；s > 阈值 ⇒ v *= 100/|v·dt|（阈值 = 系数² = 100²）⇒ 每步位移硬上限 100 格。
+  //   ⚠ 游戏内不可达：力度表上限 580 × 0.01 ⇒ Δv ≤ 5.8 ⇒ |v·dt| ≤ 0.193
+  //     ⇒ 本工具全部标定用例都不会触发；加它是为了口径完整，不是新增结论。
+  //   依据：物理分册 06 §7 结案条。
+  var mvd = Math.hypot(st.vx, st.vy) * K.dt;
+  if (mvd * mvd > K.maxTransSq) { var cf = K.maxTrans / mvd; st.vx *= cf; st.vy *= cf; }
   var ix0 = st.vx * K.dt, iy0 = st.vy * K.dt;
   st.x += ix0; st.y += iy0;
   log.push({ t: '\u00b7 \u79ef\u5206', d: '\u0394=(' + ix0.toFixed(6) + ',' + iy0.toFixed(6) + ')' });
@@ -782,7 +847,7 @@ function step(st, cfg) {
   // ★ 实机位置以 float32 存储（单精度）——每步末尾量化，保证与实测同精度
   st.x = Math.fround(st.x); st.y = Math.fround(st.y);
   log.push({ t: '\u2463 ClearForces + float32 \u5b58\u50a8', d: '(' + st.x.toFixed(7) + ', ' + st.y.toFixed(7) + ')' });
-  return { ch: loop.steps ? 'TOI' : (anyTouch ? 'REG' : 'NONE'), log: log, mu: muSum };
+  return { ch: loop.steps ? 'TOI' : (anyTouch ? 'REG' : 'NONE'), log: log, mu: muSum, sweptOnly: loop.sweptOnly || 0 };
 }
 
 /* ---------- cfg 归一化：把「单力 cfg」与「forces 序列」统一成事件数组 ----------
@@ -1014,14 +1079,14 @@ function simulate(cfg) {
            ') ⇒ 本帧积分为速度（「只写力累加器、下一次物理步才成速度」）' });
     }
     var stepsPerFrame = cfg.stepsPerFrame || 1;
-    var muSum = 0;
+    var muSum = 0, sweptSum = 0;
     if (!doPhysics) {
       allLog.push({ t: '· 物理步跳过',
         d: '本帧敌人【非失衡】⇒ 不参与物理模拟（自主移动为写位置而非给速度，v ≡ 0，摩擦无从下手）；不碰撞求解、不积分、位置不变' });
     }
     for (var sIdx = 0; doPhysics && sIdx < stepsPerFrame; sIdx++) {
       var r2 = step(st, cfg);
-      chs.push(r2.ch); allLog = allLog.concat(r2.log); muSum += (r2.mu || 0);
+      chs.push(r2.ch); allLog = allLog.concat(r2.log); muSum += (r2.mu || 0); sweptSum += (r2.sweptOnly || 0);
     }
 
     // ⑤ 帧末 (d) ★ 急停（两条判据；★ 修订：A = 距【拉力终点 src】≤0.05、B = 距【效果源=施力者中心】≤0.6708）
@@ -1137,6 +1202,7 @@ function simulate(cfg) {
     // ⑥ 记录帧（旧 9 字段语义不变；新增字段只增不改）
     var fr = { k: k, x0: x0, y0: y0, x1: st.x, y1: st.y, v: Math.hypot(st.vx, st.vy),
       ch: chs.join('+'), mu: muSum, state: (doPhysics ? '失衡' : '非失衡'), log: allLog, note: note };
+    fr.sweptOnly = sweptSum;
     fr.srcCount = srcAtStart;
     fr.activeSources = actStart.map(function (s) { return { id: s.id, force: { x: s.force.x, y: s.force.y } }; });
     fr.protectUntil = protectUntil;
@@ -1538,6 +1604,28 @@ var CASES = [
         info:'Σ Δv=' + sum.toFixed(4) + '（最大单份 ' + mx.toFixed(4) + '）⇒ 帧 1 末 |v|=' + v1.toFixed(4) +
              '（期望 = Σ Δv；若 = 单份 ⇒ "后者覆盖"回归）'};
     } },
+  /* ★★ 扫掠穿越回归（用户报告 ⇒ 已定位为**模拟器** bug，不是游戏行为）：
+     敌人 (5,3)、重量级 0、左侧墙 (4,3)，第 1 帧同帧 10 份 2 级弹道推（力级 2 / 重量级 0 ⇒ Δv 5.3/份）
+     ⇒ 帧 1 自由位移 = 53/30 = 1.767 格 > 墙格宽。
+     旧实现用【终点几何最近距离】判"有没有撞上"（隐含假设 cd 沿扫掠单调）⇒ 整只穿过去后终点 cd 又变大
+     ⇒ 被误判成"全程没撞上" ⇒ 穿墙。正解 = 沿【步首见证轴】的一维分离函数 s(t)：穿过去后 s(1) 为负
+     ⇒ 必须求根 ⇒ TOI 把敌人停在墙右面 x = 4.605（= 4.5 + 0.105）。
+     ★ 判别点：帧 1 通道必须是 TOI 且末位姿 > 3.5（旧实现给 NONE / 3.233333）。 */
+  { name:'扫掠穿越 · (5,3) 同帧 10 份 2 级推向左（帧 1 自由位移 1.77 格 > 墙格宽）', axis:'x',
+    cfg:{walls:[[4,3]], start:{x:5,y:3}, maxFrames:4, stunned:true, forces:(function(){
+      var F = [], i;
+      for (i = 0; i < 10; i++) F.push({ kind:'pushProj', hitFrame:1, forceLevel:2, massLevel:0,
+        dirMode:'preset', dir:{x:-1,y:0}, src:{x:5,y:2}, effSrc:{x:5,y:2} });
+      return F;
+    })()},
+    check:function(r){
+      var f1 = r.frames[0];
+      var ok = !!f1 && f1.ch.indexOf('TOI') >= 0 && f1.x1 > 3.5;
+      return { pass: ok,
+        info:'帧 1 通道=' + (f1 ? f1.ch : '—') + '、末 x=' + (f1 ? f1.x1.toFixed(6) : '—') +
+             '（墙 (4,3) 核心 [3.5,4.5]，期望停在 4.605）⇒ ' +
+             (ok ? '被 TOI 拦下（正确）' : '★ 穿墙（回归！）') };
+    } },
 ];
 
 /* ★★ 机制覆盖度登记表 ——
@@ -1612,6 +1700,9 @@ var MECH = [
       });
       return Object.keys(n).some(function(kk){ return n[kk] > 1; });
     } },
+  { key:'sweptPassThrough', name:'扫掠 AABB 成对 + 见证轴求根（一帧自由位移 > 墙格宽时 TOI 仍拦得住）',
+    hint:'需要"单帧自由位移 > 1 格"的用例（同帧多份推 + 轻重量 ⇒ 如 扫掠穿越）',
+    active:function(r){ return (r.frames||[]).some(function(f){ return (f.sweptOnly||0) > 0; }); } },
 ];
 
 function runCases() {
@@ -1636,6 +1727,14 @@ function runCases() {
     }
     return {name:c.name, pass:pass, rows:rows, vals:vals};
   });
+  // ── 宽相成对口径（扫掠 AABB）：机制在游戏可达力度下不可被场景激活 ⇒ 用具名单元断言守回归 ──
+  var pw = pairWindowCheck();
+  res.push({
+    name:'宽相成对口径（扫掠 AABB：步首 fat 窗口外、扫掠路径上仍成对）',
+    pass: pw.ok, rows: [],
+    info:'单点位姿成对数 = ' + pw.one + '（期望 0）；扫掠后成对数 = ' + pw.swp + '（期望 1）；' +
+         '整段都够不到 = ' + pw.far + '（期望 0）'
+  });
   // ── 覆盖度统计：每条机制至少要有一条用例「激活」它 ──
   var cov = MECH.map(function(m){
     var hit = CASES.filter(function(c, i){
@@ -1657,7 +1756,8 @@ function runCases() {
   return res;
 }
 
-return {K:K, simulate:simulate, CASES:CASES, runCases:runCases, manifoldAt:manifoldAt, roundHalfUp:roundHalfUp};
+return {K:K, simulate:simulate, CASES:CASES, runCases:runCases, manifoldAt:manifoldAt, roundHalfUp:roundHalfUp,
+        pairsAt:pairsAt, pairWindowCheck:pairWindowCheck};
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = SIM;
 </script>
