@@ -39,6 +39,7 @@ aside h3:first-child{margin-top:0}
 .tag.mimic{background:#33283a;color:var(--mimic)}
 .tag.hg{background:#3a2b1f;color:var(--warn)}
 .tag.rg{background:#1f3040;color:var(--acc)}
+.tag.pk{background:#1e3a2a;color:#8ecf9b}
 .tag.var{background:#2b3040;color:#9fb3d1}
 .tag.lv{background:#3a2530;color:#f0997b}
 .hg{display:flex;align-items:center;gap:8px;padding:3px 4px}
@@ -753,6 +754,19 @@ window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"t
   const refInfo = k => CORE.refInfo(level, k);
   // 非别名标注：本体 key 与原名不同的才提示（便于肉眼区分变体）
   const isVariant = k => !!k && k.indexOf("#") > 0;
+  // 随机组归属反查（供「组」列与时间轴提示标包名）：
+  // 随机包的成员条目常常**只写包键、省略组键**，只看条目自身字段会被显示成「—」，
+  // 看不出它属于哪个组、抽中的是哪个包。这里用与 compute 同一套分组规则反查
+  // (波, 片段, 条目下标) → {组键, 包键}；查不到 = 不属任何随机组（常驻 / 隐藏组条目）。
+  let ownerMap = null, ownerLv = null;
+  function ownerOf(wi, fi, act) {
+    if (ownerLv !== level) {
+      ownerLv = level; ownerMap = new Map();
+      CORE.groupsOfLevel(level).forEach(g => g.buckets.forEach(b => b.members.forEach(i =>
+        ownerMap.set(g.wave + "." + g.frag + "." + i, { g: g.raw, pk: b.packKey || "" }))));
+    }
+    return ownerMap.get(wi + "." + fi + "." + act) || null;
+  }
   // 关卡敌人变体标（`enemyDbRefs.overwrittenData` 有 m_defined 字段才出现）
   function refTag(k) {
     const r = refInfo(k);
@@ -973,9 +987,11 @@ window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"t
       d.style.height = l.h + "px";
       d.style.background = l.color;
       const un = unitName(e.key);
+      const ow = ownerOf(e.wave, e.frag, e.act);
       const info = e.frame + "f · " + fmtT(e.frame) + " · w" + e.wave + "f" + e.frag + "a" + e.act +
         "#" + e.seq + " " + e.kind + " " + (e.key || "") + (un ? " " + un : "") +
-        (e.hg ? " · 隐 " + e.hg : "") + (e.rg ? " · 随 " + e.rg : "");
+        (e.hg ? " · 隐 " + e.hg : "") +
+        (ow ? " · 随 " + ow.g + (ow.pk ? " · 包 " + ow.pk : "") : (e.rg ? " · 随 " + e.rg : ""));
       d.title = info;                                  // 桌面端：悬浮提示
       d.addEventListener("click", () => {
         selFrame = e.frame; selKey = e.key;
@@ -988,11 +1004,17 @@ window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"t
 
     const qs = e => e.frame + "|" + e.wave + "|" + e.frag + "|" + e.act + "|" + e.seq;
     const baseQ = new Map(base.events.map(e => [qs(e), e.frame]));
-    // 归属标注（隐藏组 / 随机组）—— 不必勾选就能看出该条目属于哪一组
-    const gcellOf = (hg, rg) => "<td>" +
-      (hg ? '<span class="tag hg">隐 ' + hg + "</span>" : "") +
-      (rg ? '<span class="tag rg">随 ' + rg + "</span>" : "") +
-      (!hg && !rg ? '<span class="dt">—</span>' : "") + "</td>";
+    // 归属标注（隐藏组 / 随机组 / 随机包）—— 不必勾选就能看出该条目属于哪一组、抽中哪个包
+    // 组 / 包名经 ownerOf 解析：随机包的成员条目常省略组键，只看条目自身字段会漏标
+    const gcellOf = (hg, wi, fi, act, rgSelf) => {
+      const ow = ownerOf(wi, fi, act);
+      const rg = (ow && ow.g) || rgSelf || "", pk = (ow && ow.pk) || "";
+      return "<td>" +
+        (hg ? '<span class="tag hg">隐 ' + hg + "</span>" : "") +
+        (rg ? '<span class="tag rg">随 ' + rg + "</span>" : "") +
+        (pk ? '<span class="tag pk">包 ' + pk + "</span>" : "") +
+        (!hg && !rg && !pk ? '<span class="dt">—</span>' : "") + "</td>";
+    };
 
     // 逐条目账
     $("#thQdt").style.display = bd ? "" : "none";
@@ -1010,7 +1032,7 @@ window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"t
         (isVariant(e.key) ? ' <span class="tag var" title="本关专属别名 → ' + baseKeyOf(e.key) + '">别名</span>' : "") + refTag(e.key) +
         '</td><td class="mono">' + (e.t / 30000).toFixed(2) + "</td><td>" + (e.route == null ? "—" : e.route) +
         "</td><td>" + (e.syn ? "合成" : (e.kind === "SPAWN" ? "出生" : "执行")) + "</td>" + dcell +
-        gcellOf(e.hg, e.rg);
+        gcellOf(e.hg, e.wave, e.frag, e.act, e.rg);
       tb.appendChild(tr);
     });
     if (result.removedRows.length) {
@@ -1025,7 +1047,7 @@ window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"t
         ".a" + r.act + "</td><td>" + r.type + "</td><td>" + (r.key || "—") +
         (unitName(r.key) ? ' <span class="dt">' + unitName(r.key) + "</span>" : "") +
         '</td><td class="mono">—</td><td>—</td><td class="reason">' + r.reason + "</td>" +
-        (bd ? "<td>—</td>" : "") + gcellOf(r.hg, r.rg);
+        (bd ? "<td>—</td>" : "") + gcellOf(r.hg, r.wave, r.frag, r.act, r.rg);
       tb.appendChild(tr);
     });
 
