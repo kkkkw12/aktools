@@ -7,3 +7,8 @@ AGENTS.md
 _local/
 .work*/
 
+# 以 . 开头的工具/缓存目录一律不入库（AI 助手爱在工作区新建 .xxx 目录）
+# .github 例外：工作流需要能新增文件
+.*/
+!/.github/
+
