@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>明日方舟数据工具</title>
 <meta name="theme-color" content="#16181d">
-<meta name="description" content="明日方舟客户端数据工具集：波次帧账分析器、失衡位移逐帧模拟器。纯静态、零依赖、手机可用。">
+<meta name="description" content="明日方舟客户端数据工具集：波次帧账分析器、失衡位移逐帧模拟器、定点计时器帧长计算器。纯静态、零依赖、手机可用。">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -69,10 +69,22 @@ footer code{font-family:ui-monospace,Consolas,monospace;color:var(--tx2)}
         <span class="tag">导出 CSV</span>
       </div>
     </a>
+
+    <a class="card" href="timer/">
+      <h2>定点计时器帧长计算器 <span class="go">打开 →</span></h2>
+      <p>把「每 N 秒触发一次」的间隔按 32 位定点数逐帧跑一遍：算出实际帧长、残差与累积误差，
+         看它在第几个周期翻帧。判定方式、续接方式、容差都可切换，附逐周期账表。</p>
+      <div class="tags">
+        <span class="tag">定点数</span>
+        <span class="tag">逐帧模拟</span>
+        <span class="tag">残差账</span>
+        <span class="tag">翻帧周期</span>
+      </div>
+    </a>
   </div>
 
   <footer>
-    <div>构建于 <code id="stamp">2026-11-02 10:12</code></div>
+    <div>构建于 <code id="stamp">2026-11-08 02:23</code></div>
     <div class="notice">
       本页只托管完全独立运行的静态页面，<b>不含</b>游戏本体资源（美术 / 音频 / 脚本代码）。<br>
       工具用到的映射数据（单位名、延迟、关名、箱型常量）取自客户端配置数据，随游戏版本更新。

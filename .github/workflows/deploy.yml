@@ -40,13 +40,28 @@ jobs:
       - uses: actions/checkout@v4
 
       # 只把「站点内容」打进 artifact —— scripts/、README、.git 不发布
+      #
+      # 工具目录不点名：顶层凡是**直接放着 index.html** 的目录都算一个工具，自动带上。
+      # 加第三个工具时不必再来改这里（上一版写死 `cp -r wave unbalance`，
+      # 忘了改就是发布一个 404 的目录）。data/ 单独判一下 —— 它不是工具页。
       - name: 组装站点
         run: |
           set -eu
           mkdir -p _site
           cp index.html manifest.webmanifest .nojekyll _site/
           cp icon-192.png icon-512.png _site/
-          cp -r wave unbalance _site/
+          for d in */; do
+            d="${d%/}"
+            # _site 刚刚被填了 index.html，不排掉它就会把自己抄进自己
+            [ "$d" = "_site" ] && continue
+            [ "$d" = "data" ] && continue
+            [ "$d" = "scripts" ] && continue
+            [ "$d" = ".github" ] && continue
+            if [ -f "$d/index.html" ]; then
+              cp -r "$d" _site/
+              echo "  工具目录: $d"
+            fi
+          done
           if [ -d data ]; then cp -r data _site/; fi
           echo "--- 待发布内容 ---"
           find _site -type f | wc -l | sed 's/^/  文件数: /'

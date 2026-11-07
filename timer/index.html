@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>定点计时器模拟与计算</title>
+<style>
+:root{
+  --bg:#14161a; --panel:#1b1e24; --panel2:#20242c; --line:#2a2f3a;
+  --tx:#d8dce2; --tx2:#8b93a1; --acc:#4da3ff; --ok:#66bb6a; --warn:#ffb74d;
+  --gold:#ffd54f; --bad:#e26a6a; --fir:#b39ddb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.5 "Segoe UI","Microsoft YaHei",sans-serif}
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;flex-wrap:wrap}
+header h1{font-size:15px;margin:0;font-weight:600}
+header .sp{flex:1}
+header select,header input,header button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:4px;padding:3px 9px}
+header button{cursor:pointer}
+header button.pri{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+main{display:flex;align-items:flex-start}
+aside{width:340px;min-width:340px;background:var(--panel);border-right:1px solid var(--line);padding:10px 12px;max-height:calc(100vh - 46px);overflow-y:auto}
+aside h3{font-size:12px;color:var(--tx2);margin:14px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+aside h3:first-child{margin-top:0}
+.row{display:grid;grid-template-columns:96px 1fr;gap:6px;align-items:center;margin-bottom:5px}
+.row label{color:var(--tx2);font-size:12px}
+.row input[type=text],.row input[type=number],.row select{width:100%;background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:4px;padding:3px 7px;font-family:Consolas,monospace}
+.row .hint{grid-column:2;color:var(--tx2);font-size:10px;margin-top:-2px}
+.chk{display:flex;align-items:center;gap:7px;margin:5px 0;font-size:12px}
+.chk input{accent-color:var(--acc)}
+.presets{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.presets button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer}
+.presets button:hover{border-color:var(--acc)}
+#mainArea{flex:1;padding:12px 16px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin-bottom:12px}
+.card h2{font-size:13px;margin:0 0 8px;color:var(--tx);font-weight:600}
+.card h2 .sub{color:var(--tx2);font-weight:400;font-size:11px;margin-left:8px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{padding:3px 7px;border-bottom:1px solid var(--line);text-align:right;font-family:Consolas,monospace;white-space:nowrap}
+th{color:var(--tx2);font-weight:600;text-align:right;position:sticky;top:0;background:var(--panel)}
+td.l,th.l{text-align:left}
+tr.wob td{background:rgba(255,183,77,.10)}
+tr.first td{background:rgba(179,157,219,.10)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.wr{color:var(--warn)}.fir{color:var(--fir)}.dim{color:var(--tx2)}
+.banner{padding:8px 12px;border-radius:5px;margin-bottom:12px;font-size:13px}
+.banner.pass{background:rgba(102,187,106,.14);border:1px solid var(--ok);color:#a5d6a7}
+.banner.fail{background:rgba(230,106,106,.14);border:1px solid var(--bad);color:#ef9a9a}
+.banner.info{background:rgba(77,163,255,.10);border:1px solid var(--acc);color:#90caf9}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:12px}
+.kv .k{color:var(--tx2)}.kv .v{font-family:Consolas,monospace}
+.note{color:var(--tx2);font-size:11px;line-height:1.7}
+.note code{background:var(--panel2);padding:1px 4px;border-radius:3px;font-family:Consolas,monospace}
+.tag{display:inline-block;border-radius:3px;padding:0 5px;font-size:10px;margin-left:4px}
+.tag.w{background:#3a3323;color:var(--gold)}.tag.f{background:#2b2540;color:var(--fir)}
+details{margin-top:6px}
+summary{cursor:pointer;color:var(--acc);font-size:12px}
+pre{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:8px;overflow:auto;font-size:11px;max-height:340px}
+a{color:var(--acc)}
+.scroll{overflow-x:auto}
+/* ---- 说明抽屉（D1）：正文只挂 ?.按钮，文案一律来自 *-notes.js 按 id 取 ---- */
+.nref{display:inline-block;width:15px;height:15px;line-height:14px;text-align:center;padding:0;
+  border:1px solid var(--line);border-radius:50%;background:var(--panel2);color:var(--tx2);
+  font-size:10px;font-weight:700;cursor:pointer;vertical-align:1px;margin-left:5px}
+.nref:hover{border-color:var(--acc);color:var(--acc)}
+#drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,94vw);min-width:0;max-height:none;
+  padding:0;border:0;border-left:1px solid var(--line);background:var(--panel);overflow:hidden;
+  box-shadow:-6px 0 24px rgba(0,0,0,.45);z-index:20;
+  display:none;flex-direction:column}
+#drawer.open{display:flex}
+#drawer .dh{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);flex:0 0 auto}
+#drawer .dh b{font-size:13px}
+#drawer .dh .sp{flex:1}
+#drawer .db{overflow-y:auto;padding:4px 16px 24px;flex:1 1 auto}
+#drawer .db h4{font-size:12.5px;margin:16px 0 4px;color:var(--acc);border-bottom:1px solid var(--line);padding-bottom:3px}
+#drawer .db .bd{color:var(--tx2);font-size:12px;line-height:1.75}
+#drawer .db .bd code{background:var(--panel2);padding:1px 4px;border-radius:3px;font-family:Consolas,monospace;color:var(--tx)}
+#drawer .db .bd b{color:var(--tx)}
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:19;display:none}
+#scrim.open{display:block}
+@media print{#drawer{position:static;display:block!important;width:auto;border:0;box-shadow:none}#scrim,.nref,header button,header select{display:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>定点计时器模拟与计算</h1>
+  <span class="dim" style="font-size:11px">Q32.32 定点数 · 逐帧模拟</span>
+  <span class="sp"></span>
+  <select id="preset" title="内置预设（只设输入，结果由工具算）"></select>
+  <button class="pri" id="runBtn">▶ 运行</button>
+  <button id="selfBtn">🧪 内置自检</button>
+  <button id="allNotesBtn">📖 全部说明</button>
+</header>
+<main>
+<aside>
+  <h3>参数（秒 / 分数）<button class="nref" data-note="inputs">?</button></h3>
+  <div class="row"><label>周期长度</label><input type="text" id="period" value="1.0"></div>
+  <div class="row"><label>初始冷却</label><input type="text" id="r0" value="period"></div>
+  <div class="row"><label>每帧 dt</label><input type="text" id="dt" value="69905/2^21">
+    <button class="nref" data-note="dt" style="align-self:start;margin-top:4px">?</button></div>
+  <div class="row"><label>容差 eps</label><input type="text" id="eps" value="1e-5">
+    <button class="nref" data-note="eps" style="align-self:start;margin-top:4px">?</button></div>
+  <div class="row"><label>周期数</label><input type="number" id="cycles" value="20" min="1" max="2000"></div>
+  <div class="row"><label>首 tick 帧</label><input type="text" id="firstTick" value="">
+    <button class="nref" data-note="firsttick" style="align-self:start;margin-top:4px">?</button></div>
+
+  <h3>配置项</h3>
+  <div class="row"><label>判据</label>
+    <select id="judge">
+      <option value="LE">LE 单边容差</option>
+      <option value="IsZero">IsZero 双边容差</option>
+      <option value="BARE">裸 &lt;=0（无容差）</option>
+    </select>
+    <button class="nref" data-note="judge" style="align-self:start;margin-top:4px">?</button>
+  </div>
+  <label class="chk"><input type="checkbox" id="clamp"> 到期时把剩余冷却钳零<button class="nref" data-note="clamp">?</button></label>
+  <div class="row"><label>续接方式</label>
+    <select id="renew">
+      <option value="accumulate">Next: += period（保留余量）</option>
+      <option value="reset">Next: = period（复位）</option>
+      <option value="reload">Reset 重装（不调 Next）</option>
+    </select>
+    <button class="nref" data-note="renew" style="align-self:start;margin-top:4px">?</button>
+  </div>
+  <label class="chk"><input type="checkbox" id="trace"> 输出逐帧明细</label>
+
+  <h3>预设（只设输入）<button class="nref" data-note="presets">?</button></h3>
+  <div class="presets" id="presetBtns"></div>
+
+  <h3>范围说明<button class="nref" data-note="scope">?</button></h3>
+  <div class="note">覆盖同一类「到期扣减 + 续接」计时器的三种判据 × 三种续接组合。
+    权威口径：<b>逐帧模拟</b>；闭式递推只作校验列，不一致即显式告警。
+    点开 <b>?</b> 看完整边界与不覆盖的范式。</div>
+</aside>
+<div id="mainArea">
+  <div id="verdict"></div>
+
+  <div class="card">
+    <h2>① 参数 → FP 换算 <button class="nref" data-note="fp-canon">?</button></h2>
+    <div class="scroll"><table id="fpTable"></table></div>
+    <div class="note" id="fpNote"></div>
+  </div>
+
+  <div class="card">
+    <h2>② 逐周期帧长表 <span class="sub" id="cycSub"></span><button class="nref" data-note="legend">?</button></h2>
+    <div class="scroll"><table id="cycleTable"></table></div>
+    <div id="traceBox"></div>
+  </div>
+
+  <div class="card">
+    <h2>③ 残差账 <span class="sub">为什么第 N 个周期会多 1 帧</span><button class="nref" data-note="residual">?</button></h2>
+    <div id="residual"></div>
+  </div>
+
+  <div class="card">
+    <h2>④ 说明与取数口径 <button class="nref" data-note="closed">?</button><button class="nref" data-note="cli">?</button></h2>
+    <div class="note" id="explain"></div>
+  </div>
+</div>
+</main>
+<div id="scrim"></div>
+<aside id="drawer">
+  <div class="dh"><b id="drawerTitle">说明</b><span class="sp"></span>
+    <button id="printBtn" title="展开全部说明后打印 / 存 PDF">🖨</button>
+    <button id="closeBtn">✕</button></div>
+  <div class="db" id="drawerBody"></div>
+</aside>
+
+
+<script src="timer-notes.js"></script>
+
+<script id="timer-core">
+var TIMER = (function () {
+'use strict';
+
+var ONE = 4294967296;
+var DT_SEC  = 69905 / Math.pow(2, 21);
+var DT_EXPR = '69905/2^21';
+var EPS_SEC = 1e-5;
+
+function fpRaw(x)       { return Math.trunc(Math.fround(Math.fround(x) * ONE)); }
+function naiveRaw(x)    { return Math.trunc(x * ONE); }
+
+function ready(judge, r, eps) {
+  if (judge === 'LE')     return r < eps;
+  if (judge === 'IsZero') return Math.abs(r) < eps;
+  return r <= 0;
+}
+function judgeName(j) {
+  return j === 'LE'     ? 'LE 单边容差'
+       : j === 'IsZero' ? 'IsZero 双边容差'
+       : '裸 <=0（无容差）';
+}
+function renewName(m) {
+  return m === 'accumulate' ? 'Next: += period（保留余量）'
+       : m === 'reset'      ? 'Next: = period（复位）'
+       : 'Reset 重装（不调 Next）';
+}
+
+function closedL(judge, A, dt, eps) {
+  if (judge === 'BARE') return Math.max(1, Math.ceil(A / dt));
+  if (judge === 'LE')   return Math.max(1, Math.floor((A - eps) / dt) + 1);
+  var n = Math.max(1, Math.floor((A - eps) / dt) + 1);
+  return Math.abs(A - n * dt) < eps ? n : null;
+}
+function renew(mode, r, period) {
+  if (mode === 'accumulate') return r + period;
+  return period;
+}
+
+function parseVal(s) {
+  if (typeof s === 'number') return s;
+  s = String(s).trim();
+  var m = s.match(/^([+-]?[\d.]+(?:[eE][+-]?\d+)?)\s*\/\s*(.+)$/);
+  if (m) {
+    var num = Number(m[1]);
+    var d = m[2].trim();
+    var p = d.match(/^2\s*\^\s*(\d+)$/);
+    var den = p ? Math.pow(2, Number(p[1])) : Number(d);
+    return (isFinite(num) && isFinite(den) && den !== 0) ? num / den : NaN;
+  }
+  return Number(s);
+}
+function fpInfo(name, expr, sec, dtRaw) {
+  var raw = fpRaw(sec), nv = naiveRaw(sec);
+  return { name:name, expr:expr, sec:sec, f32:Math.fround(sec), raw:raw, naive:nv,
+           secStr:(raw / ONE).toFixed(9), dtMul: dtRaw ? raw / dtRaw : null,
+           naiveDiff: nv !== raw };
+}
+function commas(n){ var s=String(Math.trunc(n)), out='', c=0; for(var i=s.length-1;i>=0;i--){ out=s[i]+out; if(++c%3===0 && i>0) out=','+out; } return out; }
+
+function compute(inp) {
+  var dtSec = parseVal(inp.dt), dtRaw = fpRaw(dtSec);
+  var epsSec = parseVal(inp.eps), epsRaw = fpRaw(epsSec);
+  var periodSec = parseVal(inp.period), periodRaw = fpRaw(periodSec);
+  var r0Mode = (inp.r0 === undefined || inp.r0 === '') ? 'period' : inp.r0;
+  var r0Sec, r0Expr, r0Raw;
+  if (r0Mode === 'period')            { r0Sec = periodSec; r0Expr = String(inp.period)+' (= 周期)'; r0Raw = periodRaw; }
+  else if (r0Mode === 0 || r0Mode === '0') { r0Sec = 0;  r0Expr = '0'; r0Raw = 0; }
+  else { r0Sec = parseVal(r0Mode); r0Expr = String(r0Mode); r0Raw = fpRaw(r0Sec); }
+
+  if (!isFinite(dtRaw) || !isFinite(epsRaw) || !isFinite(periodRaw) || !isFinite(r0Raw) ||
+      dtRaw <= 0 || periodRaw <= 0 || epsRaw < 0) {
+    return { error:'参数非法：dt/period 必须 > 0，eps >= 0，且都能转成有限 FP。' };
+  }
+  if (!isFinite(dtRaw) || Math.abs(periodRaw) > Number.MAX_SAFE_INTEGER ||
+      Math.abs(r0Raw) > Number.MAX_SAFE_INTEGER) {
+    return { error:'FP raw 超出 JS 安全整数范围（Number.MAX_SAFE_INTEGER）。' };
+  }
+
+  var judge = inp.judge || 'LE';
+  var clamp = !!inp.clamp;
+  var mode  = inp.renew || 'accumulate';
+  var cycles = Number(inp.cycles || 20);
+  var firstTick = (inp.firstTick === undefined || inp.firstTick === null || inp.firstTick === '')
+                    ? null : Number(inp.firstTick);
+
+  var remaining = r0Raw, frame = 0, prevFire = 0;
+  var maxL = Math.ceil(periodRaw / dtRaw) + 2;
+  var maxFrames = (cycles + 1) * maxL + 100;
+  var simRows = [], frames = [], aborted = false;
+  while (simRows.length < cycles && frame < maxFrames) {
+    frame++;
+    remaining -= dtRaw;
+    var isReady = ready(judge, remaining, epsRaw);
+    if (inp.trace) frames.push({frame:frame, remaining:remaining, ready:isReady});
+    if (isReady) {
+      var L = frame - prevFire;
+      var s = remaining;
+      var sClamped = clamp ? 0 : s;
+      var next = renew(mode, sClamped, periodRaw);
+      simRows.push({
+        cycle: simRows.length + 1, L:L, fireRel:frame,
+        fireGlobal: firstTick === null ? null : firstTick + frame - 1,
+        s:s, sClamped:sClamped, next:next,
+        A_start: (simRows.length === 0 ? r0Raw : simRows[simRows.length-1].next)
+      });
+      prevFire = frame;
+      remaining = next;
+    }
+  }
+  if (simRows.length < cycles) aborted = true;
+
+  var A = r0Raw, closedRows = [];
+  for (var p = 1; p <= cycles; p++) {
+    var Lc = closedL(judge, A, dtRaw, epsRaw);
+    if (Lc === null) { closedRows.push({cycle:p, L:null, note:'判据窗口被 dt 步长跳过 ⇒ 本周期无就绪帧'}); break; }
+    var sc  = A - Lc * dtRaw;
+    var scc = clamp ? 0 : sc;
+    var nxt = renew(mode, scc, periodRaw);
+    closedRows.push({cycle:p, L:Lc, A:A, s:sc, sClamped:scc, next:nxt});
+    A = nxt;
+  }
+
+  var agree = (simRows.length === closedRows.length);
+  var mismatches = [];
+  for (var i = 0; i < Math.min(simRows.length, closedRows.length); i++) {
+    if (simRows[i].L !== closedRows[i].L) { agree = false; mismatches.push(i+1); }
+  }
+
+  var fromCleanPeriod = closedL(judge, periodRaw, dtRaw, epsRaw);
+  var nonFirst = simRows.filter(function(row,k){ return !(k===0 && r0Raw !== periodRaw); })
+                        .map(function(row){ return row.L; });
+  var freq = {}, nominal = null, best = -1;
+  nonFirst.forEach(function(L){ freq[L] = (freq[L] || 0) + 1; });
+  Object.keys(freq).forEach(function(k){
+    var L = Number(k), c = freq[k];
+    if (c > best || (c === best && (nominal === null || L < nominal))) { best = c; nominal = L; }
+  });
+  if (nominal === null) nominal = fromCleanPeriod;
+
+  var m = Math.floor(periodRaw / dtRaw);
+  var r = periodRaw - m * dtRaw;
+  var rDt = r / dtRaw;
+  var epsOverR = r > 0 ? (epsRaw / r) : Infinity;
+
+  var flipCycles = [], flipTotal = 0;
+  if (nominal !== null) {
+    var Ax = r0Raw;
+    for (var px = 1; px <= 200; px++) {
+      var Lx = closedL(judge, Ax, dtRaw, epsRaw);
+      if (Lx === null) break;
+      var isFx = (px === 1 && r0Raw !== periodRaw);
+      if (Lx !== nominal && !isFx) {
+        flipTotal++;
+        if (flipCycles.length < 12) flipCycles.push({cycle:px, L:Lx});
+      }
+      var sx = Ax - Lx * dtRaw;
+      Ax = renew(mode, clamp ? 0 : sx, periodRaw);
+    }
+  }
+
+  var table = simRows.map(function (row, k) {
+    var cr = closedRows[k] || {};
+    var isFirst = (k === 0 && r0Raw !== periodRaw);
+    return {
+      cycle:row.cycle, L:row.L,
+      dL: (nominal === null ? null : row.L - nominal),
+      wobble: !isFirst && nominal !== null && row.L !== nominal,
+      isFirst: isFirst,
+      fireRel:row.fireRel, fireGlobal:row.fireGlobal,
+      A_start:row.A_start, s:row.s, sDt:row.s / dtRaw, next:row.next,
+      closedL: (cr.L === undefined ? null : cr.L),
+      match: (cr.L === undefined ? null : (row.L === cr.L))
+    };
+  });
+
+  return {
+    cfg:{period:periodRaw, r0:r0Raw, dt:dtRaw, eps:epsRaw, judge:judge, clamp:clamp,
+         renew:mode, cycles:cycles, firstTick:firstTick},
+    fp:{
+      period:fpInfo('周期长度', String(inp.period), periodSec, dtRaw),
+      r0:    fpInfo('初始冷却', r0Expr, r0Sec, dtRaw),
+      dt:    fpInfo('每帧 dt',  String(inp.dt),  dtSec, dtRaw),
+      eps:   fpInfo('容差 eps', String(inp.eps), epsSec, dtRaw)
+    },
+    nominal:nominal, fromCleanPeriod:fromCleanPeriod,
+    flipCycles:flipCycles, flipTotal:flipTotal,
+    mFrames:m, residual:r, residualDt:rDt, epsOverR:epsOverR,
+    table:table, closedRows:closedRows, simRows:simRows,
+    agree:agree, mismatches:mismatches, aborted:aborted, trace:frames,
+    judgeName:judgeName(judge), renewName:renewName(mode)
+  };
+}
+
+var PRESETS = {
+  cost:     {label:'费用回复 (Precise)', period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:14, note:'1.0 s · LE · 累加'},
+  normal:   {label:'塔露拉 normal 段',  period:'2.67', r0:'0',      dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:7,  firstTick:2,   note:'2.67 s · LE · 累加 · 含全局帧'},
+  overload: {label:'塔露拉 overload 段',period:'2.0',  r0:'0',      dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:9,  firstTick:543, note:'2.0 s · LE · 累加 · 含全局帧'},
+  baseNext: {label:'基类 Next 复位',     period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'IsZero', clamp:true,  renew:'reset',      cycles:6,  note:'1.0 s · 双边 · 复位（对照）'},
+  cooldown: {label:'技能冷却 (Reset 重装)',period:'1.0',r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'IsZero', clamp:true,  renew:'reload',     cycles:6,  note:'1.0 s · 双边 · 重装（对照）'},
+  baseBare: {label:'基类 Update 裸比较', period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'BARE',   clamp:true,  renew:'reset',      cycles:6,  note:'1.0 s · 裸比较（对照）'}
+};
+
+function selfTest() {
+  var res = [];
+  function chk(name, ok, detail){ res.push({name:name, ok:!!ok, detail:String(detail)}); }
+  function eq(a,b){ return a.length===b.length && a.every(function(x,i){return x===b[i];}); }
+  function Ls(key){ return compute(PRESETS[key]).table.map(function(t){return t.L;}); }
+  function Gs(key){ return compute(PRESETS[key]).table.map(function(t){return t.fireGlobal;}); }
+  function agree(key){ return compute(PRESETS[key]).agree; }
+
+  var cost = compute(PRESETS.cost);
+  chk('费用：第 11 费 31 帧', eq(cost.table.map(function(t){return t.L;}), [30,30,30,30,30,30,30,30,30,30,31,30,30,30]),
+      cost.table.map(function(t){return t.L;}).join(','));
+  chk('费用：解析 ≡ 模拟', cost.agree, cost.agree?'逐周期全等':('不一致 @ 周期 '+cost.mismatches.join(',')));
+  chk('费用：波动周期恰为 {11:31}', cost.nominal===30 &&
+      cost.table.filter(function(t){return t.wobble;}).map(function(t){return t.cycle+':'+t.L;}).join(',')==='11:31',
+      'nominal='+cost.nominal+' wobble='+cost.table.filter(function(t){return t.wobble;}).map(function(t){return t.cycle+':'+t.L;}).join(','));
+
+  var nm = compute(PRESETS.normal);
+  chk('塔露拉 normal：帧长 [1,80×6]', eq(nm.table.map(function(t){return t.L;}), [1,80,80,80,80,80,80]), nm.table.map(function(t){return t.L;}).join(','));
+  chk('塔露拉 normal：全局帧 2/82/…/482', eq(Gs('normal'), [2,82,162,242,322,402,482]), Gs('normal').join(','));
+  chk('normal：解析 ≡ 模拟', nm.agree, nm.agree?'逐周期全等':'不一致');
+  chk('normal：7 波内基准=80 且表中无波动', nm.nominal===80 &&
+      nm.table.filter(function(t){return t.wobble;}).length===0,
+      'nominal='+nm.nominal+' 表内波动='+nm.table.filter(function(t){return t.wobble;}).length);
+  chk('normal：Reset(true) 首周期=81（基准≠period 起始）', nm.fromCleanPeriod===81,
+      'fromCleanPeriod='+nm.fromCleanPeriod);
+  chk('normal：解析外推首翻帧=第 11 周期（§4.4「约 10 周期」）',
+      nm.flipTotal>0 && nm.flipCycles[0] && nm.flipCycles[0].cycle===11 && nm.flipCycles[0].L===81,
+      'flipTotal='+nm.flipTotal+' first='+(nm.flipCycles[0]?nm.flipCycles[0].cycle+':'+nm.flipCycles[0].L:'无'));
+
+  var ov = compute(PRESETS.overload);
+  chk('塔露拉 overload：帧长含 59/61', eq(ov.table.map(function(t){return t.L;}), [1,59,60,60,60,60,61,60,60]), ov.table.map(function(t){return t.L;}).join(','));
+  chk('塔露拉 overload：全局帧 543/…/1023', eq(Gs('overload'), [543,602,662,722,782,842,903,963,1023]), Gs('overload').join(','));
+  chk('overload：解析 ≡ 模拟', ov.agree, ov.agree?'逐周期全等':'不一致');
+  chk('overload：基准=60 且波动恰为 {2:59, 7:61}', ov.nominal===60 &&
+      ov.table.filter(function(t){return t.wobble;}).map(function(t){return t.cycle+':'+t.L;}).join(',')==='2:59,7:61',
+      'nominal='+ov.nominal+' wobble='+ov.table.filter(function(t){return t.wobble;}).map(function(t){return t.cycle+':'+t.L;}).join(','));
+
+  chk('基类 Next 复位：恒 30 不抖', Ls('baseNext').every(function(x){return x===30;}) && agree('baseNext'), Ls('baseNext').join(','));
+  chk('技能冷却：恒 30 不抖',       Ls('cooldown').every(function(x){return x===30;}) && agree('cooldown'), Ls('cooldown').join(','));
+  chk('基类裸比较：恒 31（无容差）', Ls('baseBare').every(function(x){return x===31;}) && agree('baseBare'), Ls('baseBare').join(','));
+
+  chk('FP 转换：FP(2.67)=11467563008', fpRaw(2.67)===11467563008 && naiveRaw(2.67)!==11467563008,
+      'correct='+fpRaw(2.67)+' naive='+naiveRaw(2.67));
+  chk('FP 转换：dt=143165440 / eps=42949', fpRaw(DT_SEC)===143165440 && fpRaw(EPS_SEC)===42949,
+      'dt='+fpRaw(DT_SEC)+' eps='+fpRaw(EPS_SEC));
+
+  var pass = res.every(function(x){return x.ok;});
+  return {pass:pass, results:res};
+}
+
+return {
+  ONE:ONE, DT_SEC:DT_SEC, DT_EXPR:DT_EXPR, EPS_SEC:EPS_SEC,
+  fpRaw:fpRaw, naiveRaw:naiveRaw, ready:ready, closedL:closedL, renew:renew,
+  parseVal:parseVal, judgeName:judgeName, renewName:renewName,
+  compute:compute, PRESETS:PRESETS, selfTest:selfTest, commas:commas
+};
+})();
+if (typeof module !== 'undefined' && module.exports) module.exports = TIMER;
+</script>
+
+<script>
+'use strict';
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function cm(n){ return TIMER.commas(n); }
+
+var NOTES = (window.TIMER_NOTES && window.TIMER_NOTES.notes) || [];
+function noteById(id){ for (var i=0;i<NOTES.length;i++) if (NOTES[i].id===id) return NOTES[i]; return null; }
+function openNote(id){
+  var n = noteById(id);
+  $('drawerTitle').textContent = n ? n.title : '未知说明：'+id;
+  $('drawerBody').innerHTML = n ? '<div class="bd">'+n.body+'</div>'
+    : '<div class="bd">缺 id=<code>'+esc(id)+'</code>。检查同目录的 timer-notes.js 是否加载。</div>';
+  $('drawer').classList.add('open'); $('scrim').classList.add('open');
+}
+function openAllNotes(){
+  $('drawerTitle').textContent = '全部说明（'+NOTES.length+' 条）';
+  $('drawerBody').innerHTML = NOTES.map(function(n){
+    return '<h4 id="note-'+esc(n.id)+'">'+esc(n.title)+'</h4><div class="bd">'+n.body+'</div>';
+  }).join('') || '<div class="bd">没加载到任何说明：检查同目录的 timer-notes.js。</div>';
+  $('drawer').classList.add('open'); $('scrim').classList.add('open');
+}
+function closeDrawer(){ $('drawer').classList.remove('open'); $('scrim').classList.remove('open'); }
+document.addEventListener('click', function(e){
+  var t = e.target;
+  while (t && t !== document){ if (t.getAttribute && t.getAttribute('data-note')) { openNote(t.getAttribute('data-note')); return; } t = t.parentNode; }
+});
+window.addEventListener('hashchange', function(){ if (location.hash.indexOf('#note-')===0) openNote(location.hash.slice(6)); });
+
+function collect(){
+  return {
+    period:$('period').value, r0:$('r0').value, dt:$('dt').value, eps:$('eps').value,
+    cycles:Number($('cycles').value), firstTick:$('firstTick').value.trim()===''?null:$('firstTick').value.trim(),
+    judge:$('judge').value, clamp:$('clamp').checked, renew:$('renew').value,
+    trace:$('trace').checked
+  };
+}
+function loadPreset(key){
+  var p = TIMER.PRESETS[key]; if(!p) return;
+  $('period').value=p.period; $('r0').value=p.r0; $('dt').value=p.dt; $('eps').value=p.eps;
+  $('cycles').value=p.cycles; $('firstTick').value=(p.firstTick==null?'':p.firstTick);
+  $('judge').value=p.judge; $('clamp').checked=p.clamp; $('renew').value=p.renew;
+  run();
+}
+
+function renderFP(res){
+  var rows=['<tr><th class="l">参数</th><th class="l">原始输入</th><th>float32 实际值</th><th>raw (Q32.32)</th><th>秒 (raw/2³²)</th><th>≈ dt 倍</th><th class="l">备注</th></tr>'];
+  ['period','r0','dt','eps'].forEach(function(k){
+    var f=res.fp[k];
+    var note = f.naiveDiff
+      ? '<span class="wr">⚠ double 直乘会得 '+cm(f.naive)+'（错）</span>'
+      : '<span class="dim">float32/double 一致</span>';
+    rows.push('<tr><td class="l dim">'+esc(f.name)+'</td><td class="l">'+esc(f.expr)+'</td>'+
+      '<td>'+f.f32.toPrecision(12)+'</td><td><b>'+cm(f.raw)+'</b></td><td>'+f.secStr+'</td>'+
+      '<td>'+(f.dtMul===null?'—':f.dtMul.toFixed(6))+'</td><td class="l">'+note+'</td></tr>');
+  });
+  $('fpTable').innerHTML=rows.join('');
+  var anyDiff = ['period','r0','dt','eps'].some(function(k){return res.fp[k].naiveDiff;});
+  $('fpNote').innerHTML = anyDiff
+    ? '★ 本组参数若按 double 直乘 2³² 再截断，会得出与上表不同的 raw（见各行红字）——差几百个单位，' +
+      '落在周期上整段帧账会漂 1 帧。口径详见标题旁的 <b>?</b>。'
+    : '本组参数 float32 与 double 直乘结果一致；口径仍按「先 float32 乘、再向零截断」走。';
+}
+
+function renderVerdict(res){
+  var v='';
+  if(res.agree && !res.aborted){
+    v='<div class="banner pass">✅ <b>解析 ≡ 逐帧模拟：逐周期全等</b>。权威输出来自逐帧模拟；闭式递推 <code>L(A)=max(1,⌊(A−eps)/dt⌋+1)</code> 与 <code>s=A−L·dt</code>、<code>A′=s+period</code> 独立算出同一组帧长。'+
+      (res.mismatches.length?('（不一致 @ '+res.mismatches.join(',')+'）'):'')+'</div>';
+  } else if(!res.agree){
+    v='<div class="banner fail">❌ <b>解析与模拟不一致</b>（周期 '+res.mismatches.join(',')+'）—— 不静默取其一，请检查判据/钳零/续接组合。当前表以「逐帧模拟」为准。</div>';
+  }
+  if(res.aborted) v+='<div class="banner fail">⚠ 未在帧数上限内凑足 '+res.cfg.cycles+' 个周期（该判据/参数组合可能永不就绪，例如 IsZero 双边窗口被 dt 步长跳过且未钳零）。已输出 '+res.table.length+' 个周期。</div>';
+  var wobs=res.table.filter(function(t){return t.wobble;}).map(function(t){return t.cycle;});
+  v+='<div class="banner info">判据 <b>'+esc(res.judgeName)+'</b> · 续接 <b>'+esc(res.renewName)+'</b> · 钳零 <b>'+(res.cfg.clamp?'开':'关')+'</b> · 基准帧长 L₀ <b>'+(res.nominal===null?'N/A':res.nominal)+'</b> 帧（模拟帧长众数）'+
+     ' · <code>Reset(true)</code> 首周期 <b>'+(res.fromCleanPeriod===null?'N/A':res.fromCleanPeriod)+'</b> 帧'+
+     (res.cfg.firstTick!==null?' · 首 tick 帧 <b>'+res.cfg.firstTick+'</b>（已给全局帧列）':'')+
+     ' · 波动周期：<b>'+(wobs.length?wobs.join(', '):'无')+'</b></div>';
+  if(res.flipTotal>0){
+    var fc = res.flipCycles.map(function(x){return '第 '+x.cycle+' 周期→'+x.L+' 帧';}).join('、');
+    v+='<div class="banner info">📐 <b>解析外推（200 周期内）</b>：共 <b>'+res.flipTotal+'</b> 个周期偏离 L₀'+
+       '（首波不计）'+(fc?'：'+esc(fc):'')+(res.flipCycles.length<res.flipTotal?' …（仅列前 '+res.flipCycles.length+' 个）':'')+
+       '。此列由闭式递推独立算出，非逐帧模拟。</div>';
+  } else if(res.nominal!==null){
+    v+='<div class="banner pass">📐 <b>解析外推（200 周期内）</b>：无周期偏离 L₀ —— 该配置不抖帧。</div>';
+  }
+  $('verdict').innerHTML=v;
+}
+
+function renderCycle(res){
+  var hasG = res.cfg.firstTick!==null;
+  var h='<tr><th>周期</th><th>帧长 L</th><th>ΔL</th><th>相对触发帧</th>'+(hasG?'<th>全局帧</th>':'')+
+        '<th>就绪余量 s (raw)</th><th>s/dt</th><th>解析 L</th><th>≡模拟</th><th class="l">标记</th></tr>';
+  var rows=[h];
+  res.table.forEach(function(t){
+    var cls = t.wobble?'wob':(t.isFirst?'first':'');
+    var tag = (t.wobble?'<span class="tag w">波动</span>':'')+(t.isFirst?'<span class="tag f">首波</span>':'');
+    rows.push('<tr class="'+cls+'"><td>'+t.cycle+'</td><td><b>'+t.L+'</b></td>'+
+      '<td class="'+(t.dL>0?'wr':(t.dL<0?'bad':'dim'))+'">'+(t.dL===null?'—':(t.dL>0?'+':'')+t.dL)+'</td>'+
+      '<td>'+t.fireRel+'</td>'+(hasG?'<td><b>'+t.fireGlobal+'</b></td>':'')+
+      '<td>'+cm(t.s)+'</td><td>'+t.sDt.toFixed(6)+'</td>'+
+      '<td>'+(t.closedL===null?'N/A':t.closedL)+'</td>'+
+      '<td class="'+(t.match?'ok':'bad')+'">'+(t.match?'✓':(t.match===false?'✗':'—'))+'</td>'+
+      '<td class="l">'+tag+'</td></tr>');
+  });
+  $('cycleTable').innerHTML=rows.join('');
+  $('cycSub').textContent='共 '+res.table.length+' 周期 · '+(hasG?'含全局帧':'纯相对帧');
+
+  if(res.trace && res.trace.length){
+    var t2='<details open><summary>逐帧明细（'+res.trace.length+' 帧，点开/收起）</summary><pre>';
+    t2+='帧\tremaining(raw)\tready\n';
+    res.trace.forEach(function(f){ t2+=f.frame+'\t'+cm(f.remaining)+'\t'+(f.ready?'✓ 触发':'')+'\n'; });
+    t2+='</pre></details>';
+    $('traceBox').innerHTML=t2;
+  } else $('traceBox').innerHTML='';
+}
+
+function renderResidual(res){
+  var q=res.cfg;
+  var lines='<div class="kv">'+
+    '<div class="k">周期 raw</div><div class="v">'+cm(q.period)+' = '+res.mFrames+'·dt + '+cm(res.residual)+'</div>'+
+    '<div class="k">每周期残差 r</div><div class="v">'+cm(res.residual)+' raw = '+res.residualDt.toFixed(9)+' dt（'+(res.residual/TIMER.ONE).toExponential(4)+' s）</div>'+
+    '<div class="k">容差 eps</div><div class="v">'+cm(q.eps)+' raw</div>'+
+    '<div class="k">eps / r</div><div class="v">'+(isFinite(res.epsOverR)?res.epsOverR.toFixed(4):'∞')+' 周期（残差累积撑破容差所需周期数，粗估）</div>'+
+    '<div class="k">基准帧长 L₀</div><div class="v">'+(res.nominal===null?'N/A':res.nominal)+' 帧（逐帧模拟帧长众数，剔除首波）</div>'+
+    '<div class="k">Reset(true) 首周期</div><div class="v">'+(res.fromCleanPeriod===null?'N/A':res.fromCleanPeriod)+' 帧（从 remaining=period 干净起步；可与 L₀ 不同，如 2.67 时 81 vs 80）</div>'+
+    '</div>';
+  var sList=res.table.map(function(t){return t.sDt.toFixed(4);});
+  lines+='<div class="note" style="margin-top:8px">逐周期就绪余量 <code>s_p / dt</code>：'+esc(sList.join(' → '))+
+    '<br>当 <code>s_p</code> 累积到 ≥ eps 时，本周期要多扣 1 帧才判就绪 ⇒ 帧长 +1。'+
+    ' <b>会不会抖由「续接方式」决定</b>（保留余量⇒累积⇒抖；复位/重装⇒蒸发⇒不抖），容差只决定「迟早一帧」的阈值。</div>';
+  $('residual').innerHTML=lines;
+}
+
+function renderExplain(res){
+  $('explain').innerHTML =
+    '· 判据 <b>'+esc(res.judgeName)+'</b>、钳零 <b>'+(res.cfg.clamp?'开':'关')+'</b>、'+
+    '续接 <b>'+esc(res.renewName)+'</b> —— 三态判据为什么要拆开、闭式式子从哪来、'+
+    '以及哪些计时范式不在范围内，都在上方 <b>?</b> 与「📖 全部说明」里。<br>'+
+    '· 本卡每次运行都按当前参数重写：表里的数字全部由逐帧模拟现算，没有一处手写。'+
+    '解析列是<b>独立实现</b>的第二条路径，与模拟逐周期对拍，不一致会在顶部显式告警。';
+}
+
+function run(){
+  var res;
+  try { res = TIMER.compute(collect()); }
+  catch(e){ $('verdict').innerHTML='<div class="banner fail">❌ 计算异常：'+esc(e.message)+'</div>'; return; }
+  if(res.error){ $('verdict').innerHTML='<div class="banner fail">❌ '+esc(res.error)+'</div>'; return; }
+  renderVerdict(res); renderFP(res); renderCycle(res); renderResidual(res); renderExplain(res);
+}
+
+function runSelf(){
+  var st=TIMER.selfTest();
+  var html='<div class="banner '+(st.pass?'pass':'fail')+'">'+(st.pass?'✅ <b>内置自检全过</b>':'❌ <b>内置自检有失败项</b>')+'（'+st.results.filter(function(r){return r.ok;}).length+'/'+st.results.length+'）</div>';
+  html+='<div class="card"><table><tr><th class="l">检查项</th><th>结果</th><th class="l">明细</th></tr>';
+  st.results.forEach(function(r){ html+='<tr><td class="l">'+esc(r.name)+'</td><td class="'+(r.ok?'ok':'bad')+'">'+(r.ok?'✓ PASS':'✗ FAIL')+'</td><td class="l dim">'+esc(r.detail)+'</td></tr>'; });
+  html+='</table></div>';
+  $('verdict').innerHTML=html;
+  var res=TIMER.compute(collect()); if(!res.error){ renderFP(res); renderCycle(res); renderResidual(res); renderExplain(res); }
+}
+
+(function init(){
+  var sel=$('preset');
+  var o=document.createElement('option'); o.value=''; o.textContent='— 选择预设 —'; sel.appendChild(o);
+  Object.keys(TIMER.PRESETS).forEach(function(k){
+    var op=document.createElement('option'); op.value=k; op.textContent=TIMER.PRESETS[k].label; sel.appendChild(op);
+    var b=document.createElement('button'); b.textContent=TIMER.PRESETS[k].label; b.title=TIMER.PRESETS[k].note;
+    b.onclick=function(){ sel.value=k; loadPreset(k); };
+    $('presetBtns').appendChild(b);
+  });
+  sel.onchange=function(){ if(sel.value) loadPreset(sel.value); };
+  $('runBtn').onclick=run;
+  $('selfBtn').onclick=runSelf;
+  $('allNotesBtn').onclick=openAllNotes;
+  $('closeBtn').onclick=closeDrawer;
+  $('scrim').onclick=closeDrawer;
+  $('printBtn').onclick=function(){ openAllNotes(); window.print(); };
+  document.addEventListener('keydown', function(e){ if (e.key==='Escape') closeDrawer(); });
+  var want = {}, missing = [];
+  Array.prototype.forEach.call(document.querySelectorAll('[data-note]'), function(b){ want[b.getAttribute('data-note')] = 1; });
+  Object.keys(want).forEach(function(id){ if (!noteById(id)) missing.push(id); });
+  if (missing.length) console.warn('timer-notes.js 缺这些 id：' + missing.join(', '));
+  var orphan = NOTES.filter(function(n){ return !want[n.id]; }).map(function(n){ return n.id; });
+  if (orphan.length) console.info('timer-notes.js 中未在正文挂 ? 的条目（只在全部说明里）：' + orphan.join(', '));
+  ['period','r0','dt','eps','cycles','firstTick'].forEach(function(id){ $(id).addEventListener('change',run); });
+  $('judge').addEventListener('change',run); $('clamp').addEventListener('change',run);
+  $('renew').addEventListener('change',run); $('trace').addEventListener('change',run);
+  loadPreset('cost');
+})();
+</script>
+</body>
+</html>
