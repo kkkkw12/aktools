@@ -125,31 +125,27 @@ button:hover{border-color:var(--acc)}
   #totalInfo{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   header{gap:6px}
 }
-/* ---------- 说明抽屉（D1）：控件旁只挂一个 ?，文案全在同目录的 wave-notes.js ---------- */
+/* 说明浮窗 */
 .nref{width:15px;height:15px;padding:0;border-radius:50%;font-size:10px;line-height:13px;text-align:center;
   background:var(--panel2);color:var(--tx2);border:1px solid var(--line);cursor:pointer;vertical-align:1px;flex:none}
 .nref:hover{color:var(--acc);border-color:var(--acc)}
-#drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,94vw);
-  min-width:0;max-height:none;padding:0;border:0;border-left:1px solid var(--line);
-  background:var(--panel);overflow:hidden;box-shadow:-6px 0 24px rgba(0,0,0,.45);z-index:20;
-  display:none;flex-direction:column}
-#drawer.open{display:flex}
-#drawer .dh{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);flex:none}
-#drawer .dh b{font-size:13px;font-weight:600}
-#drawer .dh .sp{flex:1}
-#drawer .db{overflow-y:auto;padding:10px 14px 24px;flex:1}
-#drawer .db h4{font-size:12.5px;margin:16px 0 4px;color:var(--acc);border-bottom:1px solid var(--line);padding-bottom:3px;scroll-margin-top:8px}
-#drawer .db h4:first-child{margin-top:0}
-#drawer .db .bd{color:var(--tx2);font-size:12px;line-height:1.75}
-#drawer .db .bd p{margin:0 0 8px}
-#drawer .db .bd b{color:var(--tx)}
-#drawer .db .bd code{background:var(--panel2);border:1px solid var(--line);padding:0 4px;font-family:Consolas,monospace;font-size:11px}
+#popover{position:fixed;display:none;z-index:20;flex-direction:column;overflow:hidden;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#popover.open{display:flex}
+#popover .ph{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);flex:none}
+#popover .ph b{font-size:13px;font-weight:600}
+#popover .ph .sp{flex:1}
+#popover .pb{overflow:auto;padding:10px 14px 18px;flex:1 1 auto}
+#popover .pb h4{font-size:12.5px;margin:14px 0 4px;color:var(--acc);border-bottom:1px solid var(--line);padding-bottom:3px;scroll-margin-top:8px}
+#popover .pb h4:first-child{margin-top:0}
+#popover .pb .bd{color:var(--tx2);font-size:12px;line-height:1.75}
+#popover .pb .bd p{margin:0 0 8px}
+#popover .pb .bd b{color:var(--tx)}
+#popover .pb .bd code{background:var(--panel2);border:1px solid var(--line);padding:0 4px;font-family:Consolas,monospace;font-size:11px}
 #scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:19;display:none}
 #scrim.open{display:block}
 @media (max-width:860px){.nref{width:20px;height:20px;line-height:18px;font-size:12px}}
-@media print{#drawer{position:static;display:block!important;width:auto;min-width:0;max-height:none;height:auto;border:0;box-shadow:none}
-  #scrim,.nref,#panelBtn,header button,header select,header input{display:none!important}
-  aside,#mainArea{max-height:none!important;overflow:visible!important}}
 </style>
 </head>
 <body>
@@ -234,13 +230,11 @@ button:hover{border-color:var(--acc)}
   </section>
 </main>
 <div id="scrim"></div>
-<aside id="drawer">
-  <div class="dh"><b id="drawerTitle">说明</b><span class="sp"></span>
-    <button id="printBtn" title="展开全部说明后打印 / 存 PDF">🖨</button>
-    <button id="closeBtn">✕</button>
-  </div>
-  <div class="db" id="drawerBody"></div>
-</aside>
+<div id="popover" role="dialog" aria-labelledby="popTitle">
+  <div class="ph"><b id="popTitle">说明</b><span class="sp"></span>
+    <button id="popClose" aria-label="关闭">✕</button></div>
+  <div class="pb" id="popBody"></div>
+</div>
 <script id="wave-core">
 const CORE = (() => {
   const DT = 69905 / Math.pow(2, 21);
@@ -634,53 +628,81 @@ window.WAVE_DATA = {"samples":{"act/act31side/level_act31side_03":{"aliases":{"t
 <script>
 (() => {
 
-  const NOTES = (typeof window !== "undefined" && window.WAVE_NOTES && window.WAVE_NOTES.notes) || [];
-  const noteById = id => {
-    for (let i = 0; i < NOTES.length; i++) if (NOTES[i].id === id) return NOTES[i];
-    return null;
-  };
-  const escTxt = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  function drawerOpen() {
-    $("#drawer").classList.add("open");
-    $("#scrim").classList.add("open");
+var NOTES = (typeof window !== "undefined" && window.WAVE_NOTES && window.WAVE_NOTES.notes) || [];
+function noteById(id){ for (var i=0;i<NOTES.length;i++) if (NOTES[i].id===id) return NOTES[i]; return null; }
+function escTxt(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+var popEl = document.getElementById("popover"),
+    scrimEl = document.getElementById("scrim"),
+    popTitle = document.getElementById("popTitle"),
+    popBody = document.getElementById("popBody");
+function closePop(){ popEl.classList.remove("open"); scrimEl.classList.remove("open"); }
+function placeAt(anchor){
+  var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+  var pw = Math.min(360, vw - 16);
+  var r = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect() : {left:0,right:0,top:0,bottom:0};
+  var h = popEl.offsetHeight || 240;
+  var left = r.right + 8;
+  if (left + pw > vw - 8) left = r.left - pw - 8;
+  if (left < 8) left = 8;
+  if (left + pw > vw - 8) left = vw - pw - 8;
+  var top = r.bottom + 8;
+  if (top + h > vh - 8) top = r.top - h - 8;
+  if (top < 8) top = 8;
+  popEl.style.width = pw + "px";
+  popEl.style.left = left + "px";
+  popEl.style.top = top + "px";
+  popEl.style.maxHeight = Math.min(vh - 16, 420) + "px";
+  scrimEl.classList.remove("open");
+}
+function centerPop(){
+  var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+  var pw = Math.min(720, vw - 32);
+  var h = Math.min(popEl.offsetHeight || 480, Math.floor(vh * 0.82));
+  popEl.style.width = pw + "px";
+  popEl.style.maxHeight = Math.floor(vh * 0.82) + "px";
+  popEl.style.left = Math.max(16, (vw - pw) / 2) + "px";
+  popEl.style.top = Math.max(16, (vh - h) / 2) + "px";
+  scrimEl.classList.add("open");
+}
+function showPop(title, html, anchor){
+  popTitle.textContent = title;
+  popBody.innerHTML = html;
+  popEl.classList.add("open");
+  if (anchor) placeAt(anchor); else centerPop();
+}
+function openNote(id, anchor){
+  var n = noteById(id);
+  showPop(n ? n.title : "说明",
+    n ? '<div class="bd">' + n.body + '</div>'
+      : '<div class="bd">缺 id=<code>' + escTxt(id) + '</code>：检查同目录的 wave-notes.js 是否加载。</div>',
+    anchor);
+}
+function openAllNotes(){
+  var html = NOTES.map(function(n){
+    return '<h4 id="note-' + escTxt(n.id) + '">' + escTxt(n.title) + '</h4><div class="bd">' + n.body + '</div>';
+  }).join('') || '<div class="bd">没加载到任何说明：检查同目录的 wave-notes.js。</div>';
+  showPop("全部说明（" + NOTES.length + " 条）", html, null);
+}
+document.addEventListener("click", function(ev){
+  var el = ev.target;
+  while (el) {
+    var v = (el.getAttribute && el.getAttribute("data-note")) || (el.dataset && el.dataset.note);
+    if (v) { openNote(v, el); return; }
+    var id = el.id || "";
+    if (id === "allNotesBtn") { openAllNotes(); return; }
+    if (id === "popClose" || id === "scrim") { closePop(); return; }
+    if (id === "popover") return;
+    el = el.parentNode || el.parentElement;
   }
-  function closeDrawer() {
-    $("#drawer").classList.remove("open");
-    $("#scrim").classList.remove("open");
-  }
-  function openNote(id) {
-    const n = noteById(id);
-    $("#drawerTitle").textContent = n ? n.title : "说明";
-    $("#drawerBody").innerHTML = n
-      ? '<div class="bd">' + n.body + "</div>"
-      : '<div class="bd">缺 id=<code>' + escTxt(id) + "</code>：检查同目录的 wave-notes.js 是否加载。</div>";
-    drawerOpen();
-  }
-  function openAllNotes() {
-    $("#drawerTitle").textContent = "全部说明（" + NOTES.length + " 条）";
-    $("#drawerBody").innerHTML = NOTES.map(n =>
-      '<h4 id="note-' + escTxt(n.id) + '">' + escTxt(n.title) + "</h4>" +
-      '<div class="bd">' + n.body + "</div>").join("");
-    drawerOpen();
-  }
-  document.addEventListener("click", ev => {
-    let el = ev.target;
-    while (el) {
-      if (el.dataset && el.dataset.note) { openNote(el.dataset.note); return; }
-      const id = el.id || "";
-      if (id === "allNotesBtn") { openAllNotes(); return; }
-      if (id === "printBtn") { openAllNotes(); window.print(); return; }
-      if (id === "closeBtn" || id === "scrim") { closeDrawer(); return; }
-      el = el.parentElement;
-    }
+  closePop();
+});
+document.addEventListener("keydown", function(ev){ if (ev.key === "Escape") closePop(); });
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("hashchange", function(){
+    var h = String(location.hash || "");
+    if (h.indexOf("#note-") === 0) openNote(h.slice(6));
   });
-  document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeDrawer(); });
-  if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-    window.addEventListener("hashchange", () => {
-      const h = String(location.hash || "");
-      if (h.indexOf("#note-") === 0) openNote(h.slice(6));
-    });
-  }
+}
 
   const DATA = (typeof window !== "undefined" && window.WAVE_DATA) || {};
   const SAMPLES = DATA.samples || {};

@@ -57,27 +57,26 @@ summary{cursor:pointer;color:var(--acc);font-size:12px}
 pre{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:8px;overflow:auto;font-size:11px;max-height:340px}
 a{color:var(--acc)}
 .scroll{overflow-x:auto}
-/* ---- 说明抽屉（D1）：正文只挂 ?.按钮，文案一律来自 *-notes.js 按 id 取 ---- */
+/* 说明浮窗 */
 .nref{display:inline-block;width:15px;height:15px;line-height:14px;text-align:center;padding:0;
   border:1px solid var(--line);border-radius:50%;background:var(--panel2);color:var(--tx2);
   font-size:10px;font-weight:700;cursor:pointer;vertical-align:1px;margin-left:5px}
 .nref:hover{border-color:var(--acc);color:var(--acc)}
-#drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,94vw);min-width:0;max-height:none;
-  padding:0;border:0;border-left:1px solid var(--line);background:var(--panel);overflow:hidden;
-  box-shadow:-6px 0 24px rgba(0,0,0,.45);z-index:20;
-  display:none;flex-direction:column}
-#drawer.open{display:flex}
-#drawer .dh{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);flex:0 0 auto}
-#drawer .dh b{font-size:13px}
-#drawer .dh .sp{flex:1}
-#drawer .db{overflow-y:auto;padding:4px 16px 24px;flex:1 1 auto}
-#drawer .db h4{font-size:12.5px;margin:16px 0 4px;color:var(--acc);border-bottom:1px solid var(--line);padding-bottom:3px}
-#drawer .db .bd{color:var(--tx2);font-size:12px;line-height:1.75}
-#drawer .db .bd code{background:var(--panel2);padding:1px 4px;border-radius:3px;font-family:Consolas,monospace;color:var(--tx)}
-#drawer .db .bd b{color:var(--tx)}
+#popover{position:fixed;display:none;z-index:20;flex-direction:column;overflow:hidden;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#popover.open{display:flex}
+#popover .ph{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);flex:none}
+#popover .ph b{font-size:13px}
+#popover .ph .sp{flex:1}
+#popover .pb{overflow:auto;padding:10px 14px 18px;flex:1 1 auto}
+#popover .pb h4{font-size:12.5px;margin:14px 0 4px;color:var(--acc);border-bottom:1px solid var(--line);padding-bottom:3px;scroll-margin-top:8px}
+#popover .pb h4:first-child{margin-top:0}
+#popover .pb .bd{color:var(--tx2);font-size:12px;line-height:1.75}
+#popover .pb .bd code{background:var(--panel2);padding:1px 4px;border-radius:3px;font-family:Consolas,monospace;color:var(--tx)}
+#popover .pb .bd b{color:var(--tx)}
 #scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:19;display:none}
 #scrim.open{display:block}
-@media print{#drawer{position:static;display:block!important;width:auto;border:0;box-shadow:none}#scrim,.nref,header button,header select{display:none!important}}
 </style>
 </head>
 <body>
@@ -158,12 +157,11 @@ a{color:var(--acc)}
 </div>
 </main>
 <div id="scrim"></div>
-<aside id="drawer">
-  <div class="dh"><b id="drawerTitle">说明</b><span class="sp"></span>
-    <button id="printBtn" title="展开全部说明后打印 / 存 PDF">🖨</button>
-    <button id="closeBtn">✕</button></div>
-  <div class="db" id="drawerBody"></div>
-</aside>
+<div id="popover" role="dialog" aria-labelledby="popTitle">
+  <div class="ph"><b id="popTitle">说明</b><span class="sp"></span>
+    <button id="popClose" aria-label="关闭">✕</button></div>
+  <div class="pb" id="popBody"></div>
+</div>
 
 
 <script src="timer-notes.js"></script>
@@ -437,28 +435,81 @@ function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function cm(n){ return TIMER.commas(n); }
 
-var NOTES = (window.TIMER_NOTES && window.TIMER_NOTES.notes) || [];
+var NOTES = (typeof window !== "undefined" && window.TIMER_NOTES && window.TIMER_NOTES.notes) || [];
 function noteById(id){ for (var i=0;i<NOTES.length;i++) if (NOTES[i].id===id) return NOTES[i]; return null; }
-function openNote(id){
+function escTxt(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+var popEl = document.getElementById("popover"),
+    scrimEl = document.getElementById("scrim"),
+    popTitle = document.getElementById("popTitle"),
+    popBody = document.getElementById("popBody");
+function closePop(){ popEl.classList.remove("open"); scrimEl.classList.remove("open"); }
+function placeAt(anchor){
+  var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+  var pw = Math.min(360, vw - 16);
+  var r = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect() : {left:0,right:0,top:0,bottom:0};
+  var h = popEl.offsetHeight || 240;
+  var left = r.right + 8;
+  if (left + pw > vw - 8) left = r.left - pw - 8;
+  if (left < 8) left = 8;
+  if (left + pw > vw - 8) left = vw - pw - 8;
+  var top = r.bottom + 8;
+  if (top + h > vh - 8) top = r.top - h - 8;
+  if (top < 8) top = 8;
+  popEl.style.width = pw + "px";
+  popEl.style.left = left + "px";
+  popEl.style.top = top + "px";
+  popEl.style.maxHeight = Math.min(vh - 16, 420) + "px";
+  scrimEl.classList.remove("open");
+}
+function centerPop(){
+  var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+  var pw = Math.min(720, vw - 32);
+  var h = Math.min(popEl.offsetHeight || 480, Math.floor(vh * 0.82));
+  popEl.style.width = pw + "px";
+  popEl.style.maxHeight = Math.floor(vh * 0.82) + "px";
+  popEl.style.left = Math.max(16, (vw - pw) / 2) + "px";
+  popEl.style.top = Math.max(16, (vh - h) / 2) + "px";
+  scrimEl.classList.add("open");
+}
+function showPop(title, html, anchor){
+  popTitle.textContent = title;
+  popBody.innerHTML = html;
+  popEl.classList.add("open");
+  if (anchor) placeAt(anchor); else centerPop();
+}
+function openNote(id, anchor){
   var n = noteById(id);
-  $('drawerTitle').textContent = n ? n.title : '未知说明：'+id;
-  $('drawerBody').innerHTML = n ? '<div class="bd">'+n.body+'</div>'
-    : '<div class="bd">缺 id=<code>'+esc(id)+'</code>。检查同目录的 timer-notes.js 是否加载。</div>';
-  $('drawer').classList.add('open'); $('scrim').classList.add('open');
+  showPop(n ? n.title : "说明",
+    n ? '<div class="bd">' + n.body + '</div>'
+      : '<div class="bd">缺 id=<code>' + escTxt(id) + '</code>：检查同目录的 timer-notes.js 是否加载。</div>',
+    anchor);
 }
 function openAllNotes(){
-  $('drawerTitle').textContent = '全部说明（'+NOTES.length+' 条）';
-  $('drawerBody').innerHTML = NOTES.map(function(n){
-    return '<h4 id="note-'+esc(n.id)+'">'+esc(n.title)+'</h4><div class="bd">'+n.body+'</div>';
+  var html = NOTES.map(function(n){
+    return '<h4 id="note-' + escTxt(n.id) + '">' + escTxt(n.title) + '</h4><div class="bd">' + n.body + '</div>';
   }).join('') || '<div class="bd">没加载到任何说明：检查同目录的 timer-notes.js。</div>';
-  $('drawer').classList.add('open'); $('scrim').classList.add('open');
+  showPop("全部说明（" + NOTES.length + " 条）", html, null);
 }
-function closeDrawer(){ $('drawer').classList.remove('open'); $('scrim').classList.remove('open'); }
-document.addEventListener('click', function(e){
-  var t = e.target;
-  while (t && t !== document){ if (t.getAttribute && t.getAttribute('data-note')) { openNote(t.getAttribute('data-note')); return; } t = t.parentNode; }
+document.addEventListener("click", function(ev){
+  var el = ev.target;
+  while (el) {
+    var v = (el.getAttribute && el.getAttribute("data-note")) || (el.dataset && el.dataset.note);
+    if (v) { openNote(v, el); return; }
+    var id = el.id || "";
+    if (id === "allNotesBtn") { openAllNotes(); return; }
+    if (id === "popClose" || id === "scrim") { closePop(); return; }
+    if (id === "popover") return;
+    el = el.parentNode || el.parentElement;
+  }
+  closePop();
 });
-window.addEventListener('hashchange', function(){ if (location.hash.indexOf('#note-')===0) openNote(location.hash.slice(6)); });
+document.addEventListener("keydown", function(ev){ if (ev.key === "Escape") closePop(); });
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("hashchange", function(){
+    var h = String(location.hash || "");
+    if (h.indexOf("#note-") === 0) openNote(h.slice(6));
+  });
+}
 
 function collect(){
   return {
@@ -604,11 +655,6 @@ function runSelf(){
   sel.onchange=function(){ if(sel.value) loadPreset(sel.value); };
   $('runBtn').onclick=run;
   $('selfBtn').onclick=runSelf;
-  $('allNotesBtn').onclick=openAllNotes;
-  $('closeBtn').onclick=closeDrawer;
-  $('scrim').onclick=closeDrawer;
-  $('printBtn').onclick=function(){ openAllNotes(); window.print(); };
-  document.addEventListener('keydown', function(e){ if (e.key==='Escape') closeDrawer(); });
   var want = {}, missing = [];
   Array.prototype.forEach.call(document.querySelectorAll('[data-note]'), function(b){ want[b.getAttribute('data-note')] = 1; });
   Object.keys(want).forEach(function(id){ if (!noteById(id)) missing.push(id); });

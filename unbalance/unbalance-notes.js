@@ -1,9 +1,3 @@
-/* unbalance-notes.public.js —— 失衡位移逐帧模拟器的**公开**说明载荷。
- *
- * 这份原样发布为站点上的 unbalance-notes.js。
- * 与内部版只有一层关系：**id 集合一一对应、顺序对齐**；文案各自独立手写、没有逐条替换关系。
- * 所以会红的只有两件事：① 两边 id 对不上；② 这份里出现了不该出现的词。
- */
 window.UNBALANCE_NOTES = {
   tool: "unbalance",
   notes: [
