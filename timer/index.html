@@ -111,7 +111,7 @@ a{color:var(--acc)}
     </select>
     <button class="nref" data-note="judge" style="align-self:start;margin-top:4px">?</button>
   </div>
-  <label class="chk"><input type="checkbox" id="clamp"> 到期时把剩余冷却钳零<button class="nref" data-note="clamp">?</button></label>
+  <label class="chk"><input type="checkbox" id="clamp"> 到期时把 remaining 钳到 0（丢弃余量）<button class="nref" data-note="clamp">?</button></label>
   <div class="row"><label>续接方式</label>
     <select id="renew">
       <option value="accumulate">Next: += period（保留余量）</option>
@@ -409,6 +409,15 @@ function selfTest() {
   chk('基类 Next 复位：恒 30 不抖', Ls('baseNext').every(function(x){return x===30;}) && agree('baseNext'), Ls('baseNext').join(','));
   chk('技能冷却：恒 30 不抖',       Ls('cooldown').every(function(x){return x===30;}) && agree('cooldown'), Ls('cooldown').join(','));
   chk('基类裸比较：恒 31（无容差）', Ls('baseBare').every(function(x){return x===31;}) && agree('baseBare'), Ls('baseBare').join(','));
+
+  var cdOn  = compute(PRESETS.cooldown);
+  var cdOff = compute(Object.assign({}, PRESETS.cooldown, {clamp:false}));
+  chk('技能冷却：钳零开/关结果全等（reload 下惰性）',
+      eq(cdOn.table.map(function(t){return t.L;}),    cdOff.table.map(function(t){return t.L;})) &&
+      eq(cdOn.table.map(function(t){return t.next;}), cdOff.table.map(function(t){return t.next;})) &&
+      cdOn.agree && cdOff.agree,
+      '开='+cdOn.table.map(function(t){return t.L;}).join(',')+
+      ' 关='+cdOff.table.map(function(t){return t.L;}).join(','));
 
   chk('FP 转换：FP(2.67)=11467563008', fpRaw(2.67)===11467563008 && naiveRaw(2.67)!==11467563008,
       'correct='+fpRaw(2.67)+' naive='+naiveRaw(2.67));
