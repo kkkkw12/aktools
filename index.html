@@ -12,8 +12,14 @@
 <style>
 :root{
   --bg:#16181d; --card:#1d2026; --bd:#2b2f37; --bd2:#39404b;
-  --tx:#e8e8e6; --tx2:#a8adb8; --tx3:#767c88;
+  --tx:#e8e8e6; --tx2:#a8adb8; --tx3:#9ba3b0;
   --acc:#4ca3f0; --accbg:#16283a;
+}
+/* 键盘焦点环：不要 outline:none 裸奔；reduced-motion 时收掉过渡 */
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);
@@ -26,7 +32,7 @@ h1{font-size:20px;font-weight:600;margin:0 0 6px}
 .grid{display:grid;gap:12px}
 a.card{display:block;text-decoration:none;color:inherit;background:var(--card);
   border:1px solid var(--bd);border-radius:12px;padding:16px 17px;transition:border-color .15s,transform .15s}
-a.card:hover,a.card:focus-visible{border-color:var(--acc);transform:translateY(-1px);outline:none}
+a.card:hover,a.card:focus-visible{border-color:var(--acc);transform:translateY(-1px)}
 a.card h2{font-size:16px;font-weight:600;margin:0 0 6px;display:flex;align-items:center;gap:8px}
 a.card h2 .go{margin-left:auto;color:var(--acc);font-size:14px;font-weight:400}
 a.card p{margin:0;color:var(--tx2);font-size:13px}
@@ -84,7 +90,7 @@ footer code{font-family:ui-monospace,Consolas,monospace;color:var(--tx2)}
   </div>
 
   <footer>
-    <div>构建于 <code id="stamp">2026-11-09 12:48</code></div>
+    <div>构建于 <code id="stamp">2026-11-14 10:12</code></div>
     <div class="notice">
       本页只托管完全独立运行的静态页面，<b>不含</b>游戏本体资源（美术 / 音频 / 脚本代码）。<br>
       工具用到的映射数据（单位名、延迟、关名、箱型常量）取自客户端配置数据，随游戏版本更新。
