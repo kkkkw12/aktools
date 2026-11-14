@@ -4,6 +4,42 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>波次帧账分析器</title>
+<script>
+(function () {
+  var r = document.documentElement, t, m;
+  try { t = localStorage.getItem("ui-theme"); } catch (e) {}
+  if (t !== "light" && t !== "dark") {
+    t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+  }
+  function apply(x) {
+    r.setAttribute("data-theme", x);
+    m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute("content", x === "dark" ? "#14161a" : "#f7f7f5");
+    var i = document.querySelector("[data-theme-icon]");
+    if (i) i.textContent = x === "dark" ? "☾" : "☀";
+  }
+  apply(t);
+  document.addEventListener("click", function (e) {
+    var b = e.target && e.target.closest && e.target.closest("[data-theme-toggle]");
+    if (!b) return;
+    var n = r.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(n);
+    try { localStorage.setItem("ui-theme", n); } catch (e2) {}
+  });
+  document.addEventListener("DOMContentLoaded", function () {
+    var h = document.querySelector("header");
+    if (!h) return;
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "theme-toggle";
+    b.setAttribute("data-theme-toggle", "");
+    b.setAttribute("aria-label", "切换深浅主题");
+    b.setAttribute("title", "切换深浅主题");
+    b.innerHTML = '<span data-theme-icon>' + (r.getAttribute("data-theme") === "dark" ? "☾" : "☀") + "</span>";
+    h.appendChild(b);
+  });
+})();
+</script>
 <style>
 :root{
   --bg:#14161a; --panel:#1b1e24; --panel2:#20242c; --line:#2a2f3a;
@@ -146,6 +182,51 @@ button:hover{border-color:var(--acc)}
 #scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:19;display:none}
 #scrim.open{display:block}
 @media (max-width:860px){.nref{width:20px;height:20px;line-height:18px;font-size:12px}}
+:root{color-scheme:dark;
+--ut-bg:#14161a;--ut-surface:#1b1e24;--ut-surface2:#20242c;--ut-border:#2a2f3a;--ut-border2:#3b4250;
+--ut-text:#dfe4ea;--ut-text2:#9aa3b1;--ut-text3:#8b93a1;
+--ut-accent:#5aa9ff;--ut-on-accent:#0d1117;--ut-ok:#66bb6a;--ut-warn:#ffb74d;--ut-bad:#e57373;--ut-info:#5aa9ff;--ut-gold:#ffd54f;--ut-purple:#b39ddb;
+--ut-chip:rgba(140,150,170,.16);--ut-hl:rgba(90,169,255,.14);
+--ut-ok-bg:rgba(102,187,106,.14);--ut-warn-bg:rgba(255,183,77,.14);--ut-info-bg:rgba(90,169,255,.12);--ut-bad-bg:rgba(229,115,115,.14);
+--ut-wob-bg:rgba(255,183,77,.10);--ut-first-bg:rgba(179,157,219,.12);
+--ut-shadow:0 10px 30px rgba(0,0,0,.45);--ut-scrim:rgba(0,0,0,.42);
+--ut-svg-bg:#1b1e24;--ut-svg-wall:#3b4250;--ut-svg-grid:#2a2f3a;
+--ut-m-eff:#f0997b;--ut-m-eff-bg:#5a3a2e;--ut-m-force:#8ab4f8;--ut-m-force-bg:#2a3a52;
+--ut-m-pull:#f48fb1;--ut-m-end:#ffb074;--ut-m-dot:#5aa9ff;
+--ut-radius:10px;--ut-dur:220ms
+}
+:root[data-theme=light]{color-scheme:light;
+--ut-bg:#f7f7f5;--ut-surface:#ffffff;--ut-surface2:#f0f0ec;--ut-border:#e2e0da;--ut-border2:#c9c6bd;
+--ut-text:#2c2c2a;--ut-text2:#5f5e5a;--ut-text3:#6f6d64;
+--ut-accent:#185fa5;--ut-on-accent:#ffffff;--ut-ok:#3b6d11;--ut-warn:#854f0b;--ut-bad:#a32d2d;--ut-info:#185fa5;--ut-gold:#8a6d00;--ut-purple:#6741a5;
+--ut-chip:rgba(90,100,120,.10);--ut-hl:rgba(24,95,165,.10);
+--ut-ok-bg:#eaf3de;--ut-warn-bg:#faeeda;--ut-info-bg:#e6f1fb;--ut-bad-bg:#fcebeb;
+--ut-wob-bg:#faeeda;--ut-first-bg:#eee7f6;
+--ut-shadow:0 10px 30px rgba(0,0,0,.16);--ut-scrim:rgba(0,0,0,.26);
+--ut-svg-bg:#ffffff;--ut-svg-wall:#d3d1c7;--ut-svg-grid:#f0eee9;
+--ut-m-eff:#993c1d;--ut-m-eff-bg:#f5c4b3;--ut-m-force:#0c447c;--ut-m-force-bg:#b5d4f4;
+--ut-m-pull:#993556;--ut-m-end:#d85a30;--ut-m-dot:#378add
+}
+:focus-visible{outline:2px solid var(--ut-accent);outline-offset:2px}
+button,a,input,select,textarea,label.file,.card,.grp,#tlWrap,.theme-toggle{transition:border-color var(--ut-dur),background var(--ut-dur),color var(--ut-dur),transform var(--ut-dur)}
+button,input,select,textarea{border-radius:6px}
+.card,.grp,#tlWrap,#mdOut,#popover{border-radius:var(--ut-radius)}
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;align-self:center;flex:none;width:30px;height:30px;line-height:1;padding:0;border:1px solid var(--ut-border2);border-radius:8px;background:var(--ut-surface2);color:var(--ut-text2);font-size:15px;cursor:pointer}
+.theme-toggle:hover{border-color:var(--ut-accent);color:var(--ut-accent);transform:translateY(-1px)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+:root{
+--bg:var(--ut-bg);--panel:var(--ut-surface);--panel2:var(--ut-surface2);--line:var(--ut-border);
+--tx:var(--ut-text);--tx2:var(--ut-text2);--acc:var(--ut-accent);--ok:var(--ut-ok);--warn:var(--ut-warn);
+--syn:var(--ut-purple);--del:var(--ut-text3);--gold:var(--ut-gold);--mimic:var(--ut-purple);--bad:var(--ut-bad)
+}
+label.file{border-radius:var(--ut-radius);color:var(--ut-on-accent)}
+.tag.gold,.tag.mimic,.tag.hg,.tag.rg,.tag.pk,.tag.var,.tag.lv{background:var(--ut-chip)}
+.tag.pk{color:var(--ut-ok)}.tag.var{color:var(--ut-text)}.tag.lv{color:var(--ut-bad)}
+.gline{border-top-color:var(--ut-border)}.vline{background:var(--ut-border)}
+.ev:hover,.ev.sel{outline-color:var(--ut-text)}
+tr.hl td{background:var(--ut-hl)}
+#popover{box-shadow:var(--ut-shadow)}
+#scrim{background:var(--ut-scrim)}
 </style>
 </head>
 <body>
@@ -885,7 +966,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (gc.goldChestTrapId === b) return '<span class="tag gold">金箱·受 goldTrapCnt 抽取</span>';
     if ((gc.mimicEnemyIds || []).includes(b)) return '<span class="tag mimic">模仿敌·受 mimicEnemyCnt 抽取</span>';
     if ([gc.normBoxTrapId, gc.rareBoxTrapId, gc.badBoxTrapId, gc.toolBoxTrapId, gc.specialTrapId].includes(b))
-      return '<span class="tag" style="background:#2b3040;color:#9fb3d1">箱</span>';
+      return '<span class="tag var">箱</span>';
     return "";
   }
 
