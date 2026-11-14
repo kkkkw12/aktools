@@ -190,7 +190,7 @@ tr.wob td{background:var(--ut-wob-bg)}tr.first td{background:var(--ut-first-bg)}
     </select>
     <button class="nref" data-note="judge" style="align-self:start;margin-top:4px">?</button>
   </div>
-  <label class="chk"><input type="checkbox" id="clamp"> 到期时把 remaining 钳到 0（丢弃余量）<button class="nref" data-note="clamp">?</button></label>
+  <label class="chk"><input type="checkbox" id="clamp"> 到期帧（裸 &lt;=0）把 remaining 钳到 0<button class="nref" data-note="clamp">?</button></label>
   <div class="row"><label>续接方式</label>
     <select id="renew">
       <option value="accumulate">Next: += period（保留余量）</option>
@@ -273,11 +273,12 @@ function renewName(m) {
        : 'Reset 重装（不调 Next）';
 }
 
-function closedL(judge, A, dt, eps) {
+function closedL(judge, A, dt, eps, clamp) {
   if (judge === 'BARE') return Math.max(1, Math.ceil(A / dt));
   if (judge === 'LE')   return Math.max(1, Math.floor((A - eps) / dt) + 1);
   var n = Math.max(1, Math.floor((A - eps) / dt) + 1);
-  return Math.abs(A - n * dt) < eps ? n : null;
+  if (Math.abs(A - n * dt) < eps) return n;
+  return clamp ? Math.max(1, Math.ceil(A / dt)) : null;
 }
 function renew(mode, r, period) {
   if (mode === 'accumulate') return r + period;
@@ -338,17 +339,19 @@ function compute(inp) {
   while (simRows.length < cycles && frame < maxFrames) {
     frame++;
     remaining -= dtRaw;
+    var sRaw = remaining;
+    var clampedNow = clamp && sRaw <= 0;
+    if (clampedNow) remaining = 0;
     var isReady = ready(judge, remaining, epsRaw);
-    if (inp.trace) frames.push({frame:frame, remaining:remaining, ready:isReady});
+    if (inp.trace) frames.push({frame:frame, remaining:remaining, ready:isReady, clamped:clampedNow});
     if (isReady) {
       var L = frame - prevFire;
       var s = remaining;
-      var sClamped = clamp ? 0 : s;
-      var next = renew(mode, sClamped, periodRaw);
+      var next = renew(mode, s, periodRaw);
       simRows.push({
         cycle: simRows.length + 1, L:L, fireRel:frame,
         fireGlobal: firstTick === null ? null : firstTick + frame - 1,
-        s:s, sClamped:sClamped, next:next,
+        s:s, sRaw:sRaw, next:next,
         A_start: (simRows.length === 0 ? r0Raw : simRows[simRows.length-1].next)
       });
       prevFire = frame;
@@ -359,12 +362,12 @@ function compute(inp) {
 
   var A = r0Raw, closedRows = [];
   for (var p = 1; p <= cycles; p++) {
-    var Lc = closedL(judge, A, dtRaw, epsRaw);
-    if (Lc === null) { closedRows.push({cycle:p, L:null, note:'判据窗口被 dt 步长跳过 ⇒ 本周期无就绪帧'}); break; }
+    var Lc = closedL(judge, A, dtRaw, epsRaw, clamp);
+    if (Lc === null) { closedRows.push({cycle:p, L:null, note:'判据窗口被 dt 步长跳过且未钳零 ⇒ 本周期无就绪帧'}); break; }
     var sc  = A - Lc * dtRaw;
-    var scc = clamp ? 0 : sc;
+    var scc = (clamp && sc <= 0) ? 0 : sc;
     var nxt = renew(mode, scc, periodRaw);
-    closedRows.push({cycle:p, L:Lc, A:A, s:sc, sClamped:scc, next:nxt});
+    closedRows.push({cycle:p, L:Lc, A:A, s:scc, sRaw:sc, next:nxt});
     A = nxt;
   }
 
@@ -374,7 +377,7 @@ function compute(inp) {
     if (simRows[i].L !== closedRows[i].L) { agree = false; mismatches.push(i+1); }
   }
 
-  var fromCleanPeriod = closedL(judge, periodRaw, dtRaw, epsRaw);
+  var fromCleanPeriod = closedL(judge, periodRaw, dtRaw, epsRaw, clamp);
   var nonFirst = simRows.filter(function(row,k){ return !(k===0 && r0Raw !== periodRaw); })
                         .map(function(row){ return row.L; });
   var freq = {}, nominal = null, best = -1;
@@ -394,7 +397,7 @@ function compute(inp) {
   if (nominal !== null) {
     var Ax = r0Raw;
     for (var px = 1; px <= 200; px++) {
-      var Lx = closedL(judge, Ax, dtRaw, epsRaw);
+      var Lx = closedL(judge, Ax, dtRaw, epsRaw, clamp);
       if (Lx === null) break;
       var isFx = (px === 1 && r0Raw !== periodRaw);
       if (Lx !== nominal && !isFx) {
@@ -402,7 +405,7 @@ function compute(inp) {
         if (flipCycles.length < 12) flipCycles.push({cycle:px, L:Lx});
       }
       var sx = Ax - Lx * dtRaw;
-      Ax = renew(mode, clamp ? 0 : sx, periodRaw);
+      Ax = renew(mode, (clamp && sx <= 0) ? 0 : sx, periodRaw);
     }
   }
 
@@ -440,12 +443,13 @@ function compute(inp) {
 }
 
 var PRESETS = {
-  cost:     {label:'费用回复 (Precise)', period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:14, note:'1.0 s · LE · 累加'},
-  normal:   {label:'塔露拉 normal 段',  period:'2.67', r0:'0',      dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:7,  firstTick:2,   note:'2.67 s · LE · 累加 · 含全局帧'},
-  overload: {label:'塔露拉 overload 段',period:'2.0',  r0:'0',      dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:9,  firstTick:543, note:'2.0 s · LE · 累加 · 含全局帧'},
-  baseNext: {label:'基类 Next 复位',     period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'IsZero', clamp:true,  renew:'reset',      cycles:6,  note:'1.0 s · 双边 · 复位（对照）'},
-  cooldown: {label:'技能冷却 (Reset 重装)',period:'1.0',r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'IsZero', clamp:true,  renew:'reload',     cycles:6,  note:'1.0 s · 双边 · 重装（对照）'},
-  baseBare: {label:'基类 Update 裸比较', period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'BARE',   clamp:true,  renew:'reset',      cycles:6,  note:'1.0 s · 裸比较（对照）'}
+  cost:     {label:'费用回复 (Precise)',   period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:14, note:'1.0 s · LE · 累加'},
+  sp:       {label:'技力充能 (Precise)',   period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:11, note:'1.0 s · LE · 累加 · 技力/SP 通道'},
+  normal:   {label:'塔露拉 normal 段',    period:'2.67', r0:'0',      dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:7,  firstTick:2,   note:'2.67 s · LE · 累加 · 含全局帧'},
+  overload: {label:'塔露拉 overload 段',  period:'2.0',  r0:'0',      dt:DT_EXPR, eps:'1e-5', judge:'LE',     clamp:false, renew:'accumulate', cycles:9,  firstTick:543, note:'2.0 s · LE · 累加 · 含全局帧'},
+  baseNext: {label:'基类 Next 复位',       period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'IsZero', clamp:true,  renew:'reset',      cycles:6,  note:'1.0 s · 双边 · 复位（对照）'},
+  cooldown: {label:'施法冷却门 (Reset 重装)',period:'1.0',r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'IsZero', clamp:true,  renew:'reload',     cycles:6,  note:'1.0 s · 双边 · 重装（对照）'},
+  baseBare: {label:'基类 Update 裸比较',   period:'1.0',  r0:'period', dt:DT_EXPR, eps:'1e-5', judge:'BARE',   clamp:true,  renew:'reset',      cycles:6,  note:'1.0 s · 裸比较（对照）'}
 };
 
 function selfTest() {
@@ -486,17 +490,31 @@ function selfTest() {
       'nominal='+ov.nominal+' wobble='+ov.table.filter(function(t){return t.wobble;}).map(function(t){return t.cycle+':'+t.L;}).join(','));
 
   chk('基类 Next 复位：恒 30 不抖', Ls('baseNext').every(function(x){return x===30;}) && agree('baseNext'), Ls('baseNext').join(','));
-  chk('技能冷却：恒 30 不抖',       Ls('cooldown').every(function(x){return x===30;}) && agree('cooldown'), Ls('cooldown').join(','));
+  chk('施法冷却门：恒 30 不抖',     Ls('cooldown').every(function(x){return x===30;}) && agree('cooldown'), Ls('cooldown').join(','));
   chk('基类裸比较：恒 31（无容差）', Ls('baseBare').every(function(x){return x===31;}) && agree('baseBare'), Ls('baseBare').join(','));
+
+  chk('技力充能 sp：第 11 周期 31 帧（费用同款残差）',
+      eq(Ls('sp'), [30,30,30,30,30,30,30,30,30,30,31]) && agree('sp'), Ls('sp').join(','));
 
   var cdOn  = compute(PRESETS.cooldown);
   var cdOff = compute(Object.assign({}, PRESETS.cooldown, {clamp:false}));
-  chk('技能冷却：钳零开/关结果全等（reload 下惰性）',
+  chk('施法冷却门：钳零开/关逐周期全等（1 s · reload 下惰性）',
       eq(cdOn.table.map(function(t){return t.L;}),    cdOff.table.map(function(t){return t.L;})) &&
       eq(cdOn.table.map(function(t){return t.next;}), cdOff.table.map(function(t){return t.next;})) &&
       cdOn.agree && cdOff.agree,
       '开='+cdOn.table.map(function(t){return t.L;}).join(',')+
       ' 关='+cdOff.table.map(function(t){return t.L;}).join(','));
+
+  var cd15On = compute(Object.assign({}, PRESETS.cooldown, {period:'15', cycles:6}));
+  chk('钳零兜底：IsZero+reload 在 15 s 下恒 451 帧且解析≡模拟',
+      eq(cd15On.table.map(function(t){return t.L;}), [451,451,451,451,451,451]) &&
+      cd15On.agree && !cd15On.aborted,
+      'L='+cd15On.table.map(function(t){return t.L;}).join(',')+
+      ' agree='+cd15On.agree+' aborted='+cd15On.aborted);
+  var cd15Off = compute(Object.assign({}, PRESETS.cooldown, {period:'15', cycles:6, clamp:false}));
+  chk('不钳零时 15 s 的 IsZero 窗口被跨过 ⇒ 永不就绪（保留告警）',
+      cd15Off.aborted && cd15Off.table.length === 0 && !cd15Off.agree,
+      'table='+cd15Off.table.length+' aborted='+cd15Off.aborted+' agree='+cd15Off.agree);
 
   chk('FP 转换：FP(2.67)=11467563008', fpRaw(2.67)===11467563008 && naiveRaw(2.67)!==11467563008,
       'correct='+fpRaw(2.67)+' naive='+naiveRaw(2.67));
@@ -640,9 +658,12 @@ function renderVerdict(res){
     v='<div class="banner pass">✅ <b>解析 ≡ 逐帧模拟：逐周期全等</b>。权威输出来自逐帧模拟；闭式递推 <code>L(A)=max(1,⌊(A−eps)/dt⌋+1)</code> 与 <code>s=A−L·dt</code>、<code>A′=s+period</code> 独立算出同一组帧长。'+
       (res.mismatches.length?('（不一致 @ '+res.mismatches.join(',')+'）'):'')+'</div>';
   } else if(!res.agree){
-    v='<div class="banner fail">❌ <b>解析与模拟不一致</b>（周期 '+res.mismatches.join(',')+'）—— 不静默取其一，请检查判据/钳零/续接组合。当前表以「逐帧模拟」为准。</div>';
+    var why = res.mismatches.length
+      ? '（周期 '+res.mismatches.join(',')+'）'
+      : '（逐帧模拟 '+res.table.length+' 周期 / 解析递推 '+res.closedRows.length+' 周期，行数不等）';
+    v='<div class="banner fail">❌ <b>解析与模拟不一致</b>'+why+' —— 不静默取其一，请检查判据/钳零/续接组合。当前表以「逐帧模拟」为准。</div>';
   }
-  if(res.aborted) v+='<div class="banner fail">⚠ 未在帧数上限内凑足 '+res.cfg.cycles+' 个周期（该判据/参数组合可能永不就绪，例如 IsZero 双边窗口被 dt 步长跳过且未钳零）。已输出 '+res.table.length+' 个周期。</div>';
+  if(res.aborted) v+='<div class="banner fail">⚠ 未在帧数上限内凑足 '+res.cfg.cycles+' 个周期（该判据/参数组合可能永不就绪，例如 IsZero 双边窗口被 dt 步长跨过、且未开钳零兜底）。已输出 '+res.table.length+' 个周期。</div>';
   var wobs=res.table.filter(function(t){return t.wobble;}).map(function(t){return t.cycle;});
   v+='<div class="banner info">判据 <b>'+esc(res.judgeName)+'</b> · 续接 <b>'+esc(res.renewName)+'</b> · 钳零 <b>'+(res.cfg.clamp?'开':'关')+'</b> · 基准帧长 L₀ <b>'+(res.nominal===null?'N/A':res.nominal)+'</b> 帧（模拟帧长众数）'+
      ' · <code>Reset(true)</code> 首周期 <b>'+(res.fromCleanPeriod===null?'N/A':res.fromCleanPeriod)+'</b> 帧'+
@@ -680,8 +701,8 @@ function renderCycle(res){
 
   if(res.trace && res.trace.length){
     var t2='<details open><summary>逐帧明细（'+res.trace.length+' 帧，点开/收起）</summary><pre>';
-    t2+='帧\tremaining(raw)\tready\n';
-    res.trace.forEach(function(f){ t2+=f.frame+'\t'+cm(f.remaining)+'\t'+(f.ready?'✓ 触发':'')+'\n'; });
+    t2+='帧\tremaining(raw)\t钳零\tready\n';
+    res.trace.forEach(function(f){ t2+=f.frame+'\t'+cm(f.remaining)+'\t'+(f.clamped?'→0':'')+'\t'+(f.ready?'✓ 触发':'')+'\n'; });
     t2+='</pre></details>';
     $('traceBox').innerHTML=t2;
   } else $('traceBox').innerHTML='';
